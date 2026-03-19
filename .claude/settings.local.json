@@ -7,7 +7,8 @@
       "Bash(yarn --version)",
       "Bash(bun --version)",
       "Bash(npm view:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
