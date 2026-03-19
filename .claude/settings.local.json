@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(pnpm --version)",
+      "Bash(yarn --version)",
+      "Bash(bun --version)",
+      "Bash(npm view:*)",
+      "Bash(npx:*)"
+    ]
+  }
+}
