@@ -124,6 +124,60 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-sans scroll-smooth;
   }
+}
+
+/* Glassmorphism */
+.glass {
+  background: oklch(1 0 0 / 5%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid oklch(1 0 0 / 10%);
+}
+
+.dark .glass {
+  background: oklch(1 0 0 / 5%);
+}
+
+/* Pulse animation for critical bins */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.577 0.245 27.325 / 40%); }
+  50% { box-shadow: 0 0 12px 4px oklch(0.577 0.245 27.325 / 20%); }
+}
+
+.pulse-critical {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Aurora background */
+@keyframes aurora {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.aurora-bg {
+  background: linear-gradient(-45deg, #0f172a, #064e3b, #1e1b4b, #0c4a6e);
+  background-size: 400% 400%;
+  animation: aurora 15s ease infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.556 0 0 / 30%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.556 0 0 / 50%);
 }
