@@ -14,7 +14,27 @@ function getFillColor(fill: number): string {
   return "#ef4444";
 }
 
-function createBinIcon(bin: WasteBin): L.DivIcon {
+function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
+  if (collected) {
+    return L.divIcon({
+      className: "custom-bin-marker",
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -20],
+      html: `
+        <div class="bin-collected" style="
+          width: 36px; height: 36px; border-radius: 50%;
+          background: #22c55e30; border: 2px solid #22c55e;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 14px; font-weight: 700; color: #22c55e;
+          cursor: pointer;
+        ">
+          ✓
+        </div>
+      `,
+    });
+  }
+
   const color = getFillColor(bin.current_fill_percent);
   const isCritical = bin.current_fill_percent >= 80;
   const pulseClass = isCritical ? "pulse-critical" : "";
@@ -76,13 +96,18 @@ function getPopupContent(bin: WasteBin): string {
 
 interface MapInnerProps {
   routePoints?: { latitude: number; longitude: number }[];
+  collectingIndex?: number;
+  collectedBinIds?: Set<number>;
 }
 
-export default function MapInner({ routePoints }: MapInnerProps) {
+export default function MapInner({ routePoints, collectingIndex, collectedBinIds }: MapInnerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<number, L.Marker>>(new Map());
   const routeLineRef = useRef<L.Polyline | null>(null);
+  const vehicleMarkerRef = useRef<L.Marker | null>(null);
+  const completedLineRef = useRef<L.Polyline | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   const bins = useSimulationStore((s) => s.bins);
   const selectBin = useUIStore((s) => s.selectBin);
@@ -109,9 +134,13 @@ export default function MapInner({ routePoints }: MapInnerProps) {
     mapRef.current = map;
 
     return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
+      vehicleMarkerRef.current = null;
+      completedLineRef.current = null;
+      routeLineRef.current = null;
     };
   }, []);
 
@@ -121,14 +150,15 @@ export default function MapInner({ routePoints }: MapInnerProps) {
     if (!map || bins.length === 0) return;
 
     for (const bin of bins) {
+      const isCollected = collectedBinIds?.has(bin.id) ?? false;
       const existing = markersRef.current.get(bin.id);
 
       if (existing) {
-        existing.setIcon(createBinIcon(bin));
+        existing.setIcon(createBinIcon(bin, isCollected));
         existing.setPopupContent(getPopupContent(bin));
       } else {
         const marker = L.marker([bin.latitude, bin.longitude], {
-          icon: createBinIcon(bin),
+          icon: createBinIcon(bin, isCollected),
         })
           .addTo(map)
           .bindPopup(getPopupContent(bin), {
@@ -140,16 +170,33 @@ export default function MapInner({ routePoints }: MapInnerProps) {
         markersRef.current.set(bin.id, marker);
       }
     }
-  }, [bins, selectBin]);
+  }, [bins, selectBin, collectedBinIds]);
 
   useEffect(() => {
     updateMarkers();
   }, [updateMarkers]);
 
-  // Draw route
+  // Draw route (when not collecting)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    // Skip route drawing if collecting — handled by collection effect
+    if (collectingIndex !== undefined && collectingIndex >= 0) return;
+
+    // Clean up collection visuals
+    if (completedLineRef.current) {
+      map.removeLayer(completedLineRef.current);
+      completedLineRef.current = null;
+    }
+    if (vehicleMarkerRef.current) {
+      map.removeLayer(vehicleMarkerRef.current);
+      vehicleMarkerRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
 
     if (routeLineRef.current) {
       map.removeLayer(routeLineRef.current);
@@ -168,7 +215,109 @@ export default function MapInner({ routePoints }: MapInnerProps) {
         dashArray: "8, 8",
       }).addTo(map);
     }
-  }, [routePoints]);
+  }, [routePoints, collectingIndex]);
+
+  // Collection animation
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !routePoints || routePoints.length < 2) return;
+    if (collectingIndex === undefined || collectingIndex < 0) return;
+
+    // Create vehicle marker if not exists
+    if (!vehicleMarkerRef.current) {
+      const vehicleIcon = L.divIcon({
+        className: "custom-vehicle-marker",
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: `<div class="collection-vehicle">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/>
+            <path d="M14 9h4l4 4v4c0 .6-.4 1-1 1h-1"/>
+            <circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
+          </svg>
+        </div>`,
+      });
+      vehicleMarkerRef.current = L.marker(
+        [routePoints[0].latitude, routePoints[0].longitude],
+        { icon: vehicleIcon, zIndexOffset: 1000 }
+      ).addTo(map);
+    }
+
+    // Animate vehicle movement
+    const fromIdx = Math.max(0, collectingIndex - 1);
+    const toIdx = Math.min(collectingIndex, routePoints.length - 1);
+    const from = routePoints[fromIdx];
+    const to = routePoints[toIdx];
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
+    const duration = 650;
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // cubic ease-out
+
+      const lat = from.latitude + (to.latitude - from.latitude) * eased;
+      const lng = from.longitude + (to.longitude - from.longitude) * eased;
+      vehicleMarkerRef.current?.setLatLng([lat, lng]);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      }
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    // Update route split: completed (solid) vs remaining (dashed)
+    const splitIdx = Math.min(collectingIndex, routePoints.length - 1);
+    const completedPts = routePoints.slice(0, splitIdx + 1).map(
+      (p) => L.latLng(p.latitude, p.longitude) as L.LatLng
+    );
+    const remainingPts = routePoints.slice(splitIdx).map(
+      (p) => L.latLng(p.latitude, p.longitude) as L.LatLng
+    );
+
+    // Completed line (solid green)
+    if (completedPts.length > 1) {
+      if (completedLineRef.current) {
+        completedLineRef.current.setLatLngs(completedPts);
+      } else {
+        completedLineRef.current = L.polyline(completedPts, {
+          color: "#22c55e",
+          weight: 4,
+          opacity: 1,
+        }).addTo(map);
+      }
+    }
+
+    // Remaining line (dim dashed)
+    if (remainingPts.length > 1) {
+      if (routeLineRef.current) {
+        routeLineRef.current.setLatLngs(remainingPts);
+        routeLineRef.current.setStyle({
+          color: "#a3e635",
+          weight: 2,
+          opacity: 0.4,
+          dashArray: "8, 8",
+        });
+      } else {
+        routeLineRef.current = L.polyline(remainingPts, {
+          color: "#a3e635",
+          weight: 2,
+          opacity: 0.4,
+          dashArray: "8, 8",
+        }).addTo(map);
+      }
+    } else if (routeLineRef.current) {
+      map.removeLayer(routeLineRef.current);
+      routeLineRef.current = null;
+    }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [collectingIndex, routePoints]);
 
   return (
     <>
@@ -189,6 +338,20 @@ export default function MapInner({ routePoints }: MapInnerProps) {
         .custom-bin-marker {
           background: transparent !important;
           border: none !important;
+        }
+        .custom-vehicle-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+        .collection-vehicle {
+          width: 28px; height: 28px; border-radius: 50%;
+          background: #22c55e; border: 3px solid #fff;
+          display: flex; align-items: center; justify-content: center;
+          animation: vehicle-pulse 1.5s ease-in-out infinite;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .bin-collected {
+          animation: bin-collected-pop 0.4s ease-out, collected-ring 0.6s ease-out;
         }
       `}</style>
       <div ref={containerRef} className="w-full h-full rounded-xl" />

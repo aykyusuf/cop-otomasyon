@@ -181,3 +181,22 @@
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.556 0 0 / 50%);
 }
+
+/* Collection vehicle pulse */
+@keyframes vehicle-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); transform: scale(1); }
+  50% { box-shadow: 0 0 16px 6px rgba(34, 197, 94, 0.2); transform: scale(1.05); }
+}
+
+/* Collected bin pop effect */
+@keyframes bin-collected-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* Collected bin ring expand */
+@keyframes collected-ring {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  100% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+}

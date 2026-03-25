@@ -8,7 +8,9 @@
       "Bash(bun --version)",
       "Bash(npm view:*)",
       "Bash(npx:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(rm -rf dashboard)",
+      "Bash(mv \"\\(dashboard\\)\" dashboard)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { CampusMap } from "@/components/map/campus-map";
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,24 @@ import { FillLevelBar } from "@/components/dashboard/fill-level-bar";
 
 export default function RotalarPage() {
   const bins = useSimulationStore((s) => s.bins);
-  const collectBins = useSimulationStore((s) => s.collectBins);
+  const collectBin = useSimulationStore((s) => s.collectBin);
   const [threshold, setThreshold] = useState(70);
   const [result, setResult] = useState<RouteOptimizationResult | null>(null);
   const [collecting, setCollecting] = useState(false);
   const [collectedCount, setCollectedCount] = useState(0);
+  const [collectedBinIds, setCollectedBinIds] = useState<Set<number>>(new Set());
+  const collectingRef = useRef(false);
+
+  // Cancel collection on unmount
+  useEffect(() => {
+    return () => { collectingRef.current = false; };
+  }, []);
 
   const handleGenerate = () => {
+    collectingRef.current = false;
+    setCollectedBinIds(new Set());
+    setCollecting(false);
+
     const r = optimizeRoute(bins, threshold);
     setResult(r);
     setCollectedCount(0);
@@ -37,31 +48,45 @@ export default function RotalarPage() {
   const handleCollect = async () => {
     if (!result || result.orderedBins.length === 0) return;
     setCollecting(true);
+    collectingRef.current = true;
+    setCollectedCount(0);
+    setCollectedBinIds(new Set());
 
     for (let i = 0; i < result.orderedBins.length; i++) {
+      if (!collectingRef.current) break;
+
+      setCollectedCount(i + 1); // trigger vehicle animation FIRST
       await new Promise((r) => setTimeout(r, 800));
-      setCollectedCount(i + 1);
+
+      if (!collectingRef.current) break;
+
+      // Collect bin individually so it visually empties on map
+      collectBin(result.orderedBins[i].id);
+      setCollectedBinIds((prev) => new Set(prev).add(result.orderedBins[i].id));
     }
 
-    collectBins(result.orderedBins.map((b) => b.id));
-    toast.success("Toplama tamamlandi!");
-    setCollecting(false);
+    if (collectingRef.current) {
+      toast.success("Toplama tamamlandi!");
 
-    // Save route to DB
-    fetch("/api/routes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
-        totalDistance: result.totalDistance,
-        totalBins: result.orderedBins.length,
-        estimatedDurationMin: result.estimatedDurationMin,
-        stops: result.orderedBins.map((b, i) => ({
-          binId: b.id,
-          stopOrder: i + 1,
-        })),
-      }),
-    }).catch(console.error);
+      // Save route to DB
+      fetch("/api/routes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
+          totalDistance: result.totalDistance,
+          totalBins: result.orderedBins.length,
+          estimatedDurationMin: result.estimatedDurationMin,
+          stops: result.orderedBins.map((b, i) => ({
+            binId: b.id,
+            stopOrder: i + 1,
+          })),
+        }),
+      }).catch(console.error);
+    }
+
+    setCollecting(false);
+    collectingRef.current = false;
   };
 
   const routePoints = result?.routePoints;
@@ -75,6 +100,8 @@ export default function RotalarPage() {
           <CampusMap
             className="w-full h-full rounded-xl border border-border"
             routePoints={routePoints}
+            collectingIndex={collecting ? collectedCount : undefined}
+            collectedBinIds={collecting || collectedBinIds.size > 0 ? collectedBinIds : undefined}
           />
         </div>
 
@@ -91,7 +118,7 @@ export default function RotalarPage() {
               </label>
               <Slider
                 value={[threshold]}
-                onValueChange={([v]) => setThreshold(v)}
+                onValueChange={(val) => setThreshold(Array.isArray(val) ? val[0] : val)}
                 min={30}
                 max={100}
                 step={5}
