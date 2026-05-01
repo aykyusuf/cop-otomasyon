@@ -7,12 +7,9 @@ import { BinStatusOverview } from "@/components/dashboard/bin-status-overview";
 import { ZoneSummary } from "@/components/dashboard/zone-summary";
 import { CampusMap } from "@/components/map/campus-map";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
-import { useSimulation } from "@/hooks/use-simulation";
 import { Trash2, Percent, Truck, AlertTriangle } from "lucide-react";
 
 export default function DashboardPage() {
-  useSimulation();
-
   const bins = useSimulationStore((s) => s.bins);
   const alerts = useSimulationStore((s) => s.alerts);
 

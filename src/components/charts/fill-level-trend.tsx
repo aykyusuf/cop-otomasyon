@@ -11,19 +11,19 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
+import { ZONE_OPTIONS } from "@/lib/simulation/site-config";
 
 export function FillLevelTrend() {
   const bins = useSimulationStore((s) => s.bins);
 
   // Group bins by zone and calculate average fill
-  const zones = ["muhendislik", "fen", "edebiyat", "yemekhane", "kutuphane", "spor"];
-  const data = zones.map((zone) => {
-    const zoneBins = bins.filter((b) => b.zone === zone);
+  const data = ZONE_OPTIONS.map((zone) => {
+    const zoneBins = bins.filter((b) => b.zone === zone.key);
     const avg =
       zoneBins.length > 0
         ? zoneBins.reduce((s, b) => s + b.current_fill_percent, 0) / zoneBins.length
         : 0;
-    return { zone: zone.charAt(0).toUpperCase() + zone.slice(1), doluluk: parseFloat(avg.toFixed(1)) };
+    return { zone: zone.label, doluluk: parseFloat(avg.toFixed(1)) };
   });
 
   return (

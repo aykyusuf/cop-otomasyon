@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import type { WasteBin, Alert } from "@/types";
+import {
+  normalizeBin,
+  simulateBinTick,
+} from "@/lib/simulation/production-model";
 
 interface PendingAlert {
   binId: number;
@@ -29,26 +33,6 @@ interface SimulationStore {
   setAlerts: (alerts: Alert[]) => void;
 }
 
-// Zone-based fill rate multipliers (yemekhane fills faster)
-const zoneMultiplier: Record<string, number> = {
-  yemekhane: 2.0,
-  spor: 1.3,
-  muhendislik: 1.0,
-  fen: 1.0,
-  edebiyat: 0.8,
-  kutuphane: 0.6,
-};
-
-function getStatus(fill: number): WasteBin["status"] {
-  if (fill >= 80) return "critical";
-  if (fill >= 50) return "warning";
-  return "normal";
-}
-
-function randomBetween(min: number, max: number) {
-  return Math.random() * (max - min) + min;
-}
-
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   bins: [],
   alerts: [],
@@ -60,7 +44,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   init: (bins) =>
     set({
-      bins,
+      bins: bins.map(normalizeBin),
       initialized: true,
       tickCount: 0,
       pendingAlerts: [],
@@ -73,7 +57,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     const { bins } = get();
     set({
       bins: bins.map((b) => ({
-        ...b,
+        ...normalizeBin(b),
         current_fill_percent: 0,
         temperature: 22,
         battery_level: 100,
@@ -95,62 +79,9 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     const newPendingAlerts: PendingAlert[] = [];
 
     const updatedBins = bins.map((bin) => {
-      if (bin.status === "offline" || bin.status === "collecting") return bin;
-
-      const mult = zoneMultiplier[bin.zone] || 1.0;
-      let fill = bin.current_fill_percent + randomBetween(0.3, 1.5) * speed * mult;
-      fill = Math.min(100, Math.max(0, fill));
-
-      let temp = bin.temperature + randomBetween(-0.5, 0.5);
-      temp = Math.min(55, Math.max(-5, temp));
-
-      let battery = bin.battery_level - randomBetween(0.01, 0.05) * speed;
-      battery = Math.max(0, battery);
-
-      const status = getStatus(fill);
-
-      // Generate alerts
-      if (fill > 95 && bin.current_fill_percent <= 95) {
-        newPendingAlerts.push({
-          binId: bin.id,
-          type: "overflow",
-          message: `${bin.name} tasiyor! Doluluk: ${fill.toFixed(0)}%`,
-          severity: "critical",
-        });
-      } else if (fill > 80 && bin.current_fill_percent <= 80) {
-        newPendingAlerts.push({
-          binId: bin.id,
-          type: "high_fill",
-          message: `${bin.name} dolulugu yuksek: ${fill.toFixed(0)}%`,
-          severity: "warning",
-        });
-      }
-
-      if (temp > 45 && bin.temperature <= 45) {
-        newPendingAlerts.push({
-          binId: bin.id,
-          type: "high_temp",
-          message: `${bin.name} sicaklik yuksek: ${temp.toFixed(1)}°C`,
-          severity: "warning",
-        });
-      }
-
-      if (battery < 15 && bin.battery_level >= 15) {
-        newPendingAlerts.push({
-          binId: bin.id,
-          type: "low_battery",
-          message: `${bin.name} batarya dusuk: ${battery.toFixed(0)}%`,
-          severity: "warning",
-        });
-      }
-
-      return {
-        ...bin,
-        current_fill_percent: fill,
-        temperature: temp,
-        battery_level: battery,
-        status,
-      };
+      const result = simulateBinTick(bin, speed, tickCount);
+      newPendingAlerts.push(...result.alerts);
+      return result.bin;
     });
 
     set({
@@ -167,6 +98,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           ? {
               ...b,
               current_fill_percent: 0,
+              location_type: normalizeBin(b).location_type,
               status: "normal" as const,
             }
           : b
@@ -181,6 +113,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           ? {
               ...b,
               current_fill_percent: 0,
+              location_type: normalizeBin(b).location_type,
               status: "normal" as const,
             }
           : b

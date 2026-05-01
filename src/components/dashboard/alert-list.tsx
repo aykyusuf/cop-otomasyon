@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, Flame, BatteryLow, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
 import type { Alert } from "@/types";
+import { toast } from "sonner";
 
 const alertIcons: Record<string, React.ElementType> = {
   high_fill: AlertTriangle,
@@ -21,6 +23,8 @@ const severityColors: Record<string, string> = {
 
 export function AlertList() {
   const alerts = useSimulationStore((s) => s.alerts);
+  const setAlerts = useSimulationStore((s) => s.setAlerts);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
 
   if (alerts.length === 0) {
     return (
@@ -31,15 +35,30 @@ export function AlertList() {
   }
 
   const handleResolve = async (id: number) => {
-    await fetch("/api/alerts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    try {
+      setResolvingId(id);
+      const response = await fetch("/api/alerts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Alarm cozulemedi");
+      }
+
+      setAlerts(alerts.filter((alert) => alert.id !== id));
+      toast.success("Alarm cozuldu");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Alarm cozulemedi");
+    } finally {
+      setResolvingId(null);
+    }
   };
 
   return (
-    <div className="space-y-2">
+    <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
       {alerts.slice(0, 8).map((alert: Alert) => {
         const Icon = alertIcons[alert.alert_type] || AlertTriangle;
         const colorClass = severityColors[alert.severity] || severityColors.info;
@@ -66,9 +85,10 @@ export function AlertList() {
               size="sm"
               variant="ghost"
               className="text-xs h-7 shrink-0"
+              disabled={resolvingId === alert.id}
               onClick={() => handleResolve(alert.id)}
             >
-              Coz
+              {resolvingId === alert.id ? "..." : "Coz"}
             </Button>
           </div>
         );

@@ -3,6 +3,7 @@ import type { Point } from "./distance";
 import { buildDistanceMatrix, totalRouteDistance } from "./distance";
 import { nearestNeighborTSP } from "./nearest-neighbor";
 import { twoOpt } from "./two-opt";
+import { DEPOT_POINT } from "@/lib/simulation/site-config";
 
 export interface RouteOptimizationResult {
   bins: WasteBin[];
@@ -13,9 +14,6 @@ export interface RouteOptimizationResult {
   estimatedDurationMin: number;
   routePoints: Point[];
 }
-
-// Depot location (bottom center of campus map)
-const DEPOT: Point = { latitude: 645, longitude: 500 };
 
 // Average speed: ~100 pixels per minute (walking/driving on campus)
 const SPEED_PX_PER_MIN = 100;
@@ -47,7 +45,7 @@ export function optimizeRoute(
   }
 
   // Build points array: depot + bins
-  const points: Point[] = [DEPOT, ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude }))];
+  const points: Point[] = [DEPOT_POINT, ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude }))];
   const distMatrix = buildDistanceMatrix(points);
 
   // Nearest Neighbor from depot (index 0)
@@ -64,9 +62,9 @@ export function optimizeRoute(
 
   // Build route points (depot -> bins -> depot)
   const routePoints: Point[] = [
-    DEPOT,
+    DEPOT_POINT,
     ...orderedBins.map((b) => ({ latitude: b.latitude, longitude: b.longitude })),
-    DEPOT,
+    DEPOT_POINT,
   ];
 
   const distance = totalRouteDistance(routePoints);

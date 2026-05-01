@@ -2,20 +2,10 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
-
-const TYPE_COLORS: Record<string, string> = {
-  general: "#6b7280",
-  recyclable: "#3b82f6",
-  organic: "#22c55e",
-  hazardous: "#ef4444",
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  general: "Genel",
-  recyclable: "Geri Donusum",
-  organic: "Organik",
-  hazardous: "Tehlikeli",
-};
+import {
+  WASTE_TYPE_COLORS,
+  WASTE_TYPE_LABELS,
+} from "@/lib/simulation/site-config";
 
 export function WasteTypeDistribution() {
   const bins = useSimulationStore((s) => s.bins);
@@ -29,9 +19,9 @@ export function WasteTypeDistribution() {
   );
 
   const data = Object.entries(typeCounts).map(([type, count]) => ({
-    name: TYPE_LABELS[type] || type,
+    name: WASTE_TYPE_LABELS[type as keyof typeof WASTE_TYPE_LABELS] || type,
     value: count,
-    color: TYPE_COLORS[type] || "#6b7280",
+    color: WASTE_TYPE_COLORS[type as keyof typeof WASTE_TYPE_COLORS] || "#6b7280",
   }));
 
   return (

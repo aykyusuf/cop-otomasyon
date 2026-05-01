@@ -7,22 +7,10 @@ import { useUIStore } from "@/lib/stores/ui-store";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Thermometer, Battery, Trash2 } from "lucide-react";
-
-const typeLabels: Record<string, string> = {
-  general: "Genel",
-  recyclable: "Geri Donusum",
-  organic: "Organik",
-  hazardous: "Tehlikeli",
-};
-
-const zoneLabels: Record<string, string> = {
-  muhendislik: "Muhendislik",
-  fen: "Fen",
-  edebiyat: "Edebiyat",
-  yemekhane: "Yemekhane",
-  kutuphane: "Kutuphane",
-  spor: "Spor",
-};
+import {
+  WASTE_TYPE_LABELS,
+  ZONE_CONFIG,
+} from "@/lib/simulation/site-config";
 
 function getFillColorClass(fill: number): string {
   if (fill < 25) return "text-green-500";
@@ -43,12 +31,12 @@ export default function HaritaPage() {
   return (
     <>
       <DashboardHeader title="Kampus Haritasi" />
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 p-4">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden lg:flex-row">
+        <div className="min-h-[420px] flex-1 p-4">
           <CampusMap className="w-full h-full rounded-xl border border-border" />
         </div>
 
-        <div className="w-80 border-l p-4 overflow-y-auto space-y-4">
+        <div className="max-h-[42vh] border-t p-4 overflow-y-auto space-y-4 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
           <div className="glass rounded-xl p-4 space-y-2">
             <h3 className="font-semibold text-sm">Ozet</h3>
             <div className="flex gap-2 flex-wrap">
@@ -98,7 +86,7 @@ export default function HaritaPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Thermometer className="w-4 h-4 text-muted-foreground" />
-                  <span>{selectedBin.temperature.toFixed(1)}°C</span>
+                  <span>{selectedBin.temperature.toFixed(1)} C</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Battery className="w-4 h-4 text-muted-foreground" />
@@ -106,10 +94,10 @@ export default function HaritaPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Trash2 className="w-4 h-4 text-muted-foreground" />
-                  <span>{typeLabels[selectedBin.waste_type]}</span>
+                  <span>{WASTE_TYPE_LABELS[selectedBin.waste_type]}</span>
                 </div>
                 <div className="text-muted-foreground capitalize">
-                  {zoneLabels[selectedBin.zone]}
+                  {ZONE_CONFIG[selectedBin.zone]?.label || selectedBin.zone}
                 </div>
               </div>
             </div>
@@ -130,11 +118,11 @@ export default function HaritaPage() {
                 <button
                   key={bin.id}
                   onClick={() => selectBin(bin.id)}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-sm hover:bg-accent transition-colors ${
+                  className={`w-full flex items-center justify-between gap-3 p-2 rounded-lg text-sm hover:bg-accent transition-colors ${
                     selectedBinId === bin.id ? "bg-accent" : ""
                   }`}
                 >
-                  <span className="font-medium">{bin.name}</span>
+                  <span className="truncate font-medium">{bin.name}</span>
                   <span
                     className={getFillColorClass(bin.current_fill_percent)}
                   >

@@ -6,6 +6,12 @@ import { useEffect, useRef, useCallback } from "react";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
 import { useUIStore } from "@/lib/stores/ui-store";
 import type { WasteBin } from "@/types";
+import {
+  CAMPUS_MAP_ASSET,
+  CAMPUS_MAP_BOUNDS,
+  WASTE_TYPE_LABELS,
+  ZONE_CONFIG,
+} from "@/lib/simulation/site-config";
 
 function getFillColor(fill: number): string {
   if (fill < 25) return "#22c55e";
@@ -14,7 +20,11 @@ function getFillColor(fill: number): string {
   return "#ef4444";
 }
 
-function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
+function createBinIcon(
+  bin: WasteBin,
+  collected?: boolean,
+  selected?: boolean
+): L.DivIcon {
   if (collected) {
     return L.divIcon({
       className: "custom-bin-marker",
@@ -26,10 +36,10 @@ function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
           width: 36px; height: 36px; border-radius: 50%;
           background: #22c55e30; border: 2px solid #22c55e;
           display: flex; align-items: center; justify-content: center;
-          font-size: 14px; font-weight: 700; color: #22c55e;
+          font-size: 11px; font-weight: 700; color: #22c55e;
           cursor: pointer;
         ">
-          ✓
+          OK
         </div>
       `,
     });
@@ -38,6 +48,9 @@ function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
   const color = getFillColor(bin.current_fill_percent);
   const isCritical = bin.current_fill_percent >= 80;
   const pulseClass = isCritical ? "pulse-critical" : "";
+  const ring = selected
+    ? "box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 18px rgba(34,197,94,0.5); transform: scale(1.08);"
+    : "";
 
   return L.divIcon({
     className: "custom-bin-marker",
@@ -50,7 +63,8 @@ function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
         background: ${color}20; border: 2px solid ${color};
         display: flex; align-items: center; justify-content: center;
         font-size: 10px; font-weight: 700; color: ${color};
-        cursor: pointer; transition: transform 0.2s;
+        cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+        ${ring}
       ">
         ${Math.round(bin.current_fill_percent)}%
       </div>
@@ -59,17 +73,11 @@ function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
 }
 
 function getPopupContent(bin: WasteBin): string {
-  const typeLabels: Record<string, string> = {
-    general: "Genel",
-    recyclable: "Geri Donusum",
-    organic: "Organik",
-    hazardous: "Tehlikeli",
-  };
   const statusLabels: Record<string, string> = {
     normal: "Normal",
     warning: "Uyari",
     critical: "Kritik",
-    collecting: "Toplanıyor",
+    collecting: "Toplaniyor",
     offline: "Cevrimdisi",
   };
 
@@ -80,15 +88,15 @@ function getPopupContent(bin: WasteBin): string {
         <span style="color: #94a3b8;">Doluluk:</span>
         <span style="color: ${getFillColor(bin.current_fill_percent)}; font-weight: 600;">${bin.current_fill_percent.toFixed(1)}%</span>
         <span style="color: #94a3b8;">Sicaklik:</span>
-        <span style="color: #e2e8f0;">${bin.temperature.toFixed(1)}°C</span>
+        <span style="color: #e2e8f0;">${bin.temperature.toFixed(1)} C</span>
         <span style="color: #94a3b8;">Batarya:</span>
         <span style="color: #e2e8f0;">${bin.battery_level.toFixed(0)}%</span>
         <span style="color: #94a3b8;">Tip:</span>
-        <span style="color: #e2e8f0;">${typeLabels[bin.waste_type] || bin.waste_type}</span>
+        <span style="color: #e2e8f0;">${WASTE_TYPE_LABELS[bin.waste_type] || bin.waste_type}</span>
         <span style="color: #94a3b8;">Durum:</span>
         <span style="color: #e2e8f0;">${statusLabels[bin.status] || bin.status}</span>
         <span style="color: #94a3b8;">Bolge:</span>
-        <span style="color: #e2e8f0; text-transform: capitalize;">${bin.zone}</span>
+        <span style="color: #e2e8f0;">${ZONE_CONFIG[bin.zone]?.label || bin.zone}</span>
       </div>
     </div>
   `;
@@ -98,19 +106,27 @@ interface MapInnerProps {
   routePoints?: { latitude: number; longitude: number }[];
   collectingIndex?: number;
   collectedBinIds?: Set<number>;
+  waitingNode?: { latitude: number; longitude: number; label: string } | null;
 }
 
-export default function MapInner({ routePoints, collectingIndex, collectedBinIds }: MapInnerProps) {
+export default function MapInner({
+  routePoints,
+  collectingIndex,
+  collectedBinIds,
+  waitingNode,
+}: MapInnerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<number, L.Marker>>(new Map());
   const routeLineRef = useRef<L.Polyline | null>(null);
   const vehicleMarkerRef = useRef<L.Marker | null>(null);
   const completedLineRef = useRef<L.Polyline | null>(null);
+  const waitingNodeMarkerRef = useRef<L.Marker | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
   const bins = useSimulationStore((s) => s.bins);
   const selectBin = useUIStore((s) => s.selectBin);
+  const selectedBinId = useUIStore((s) => s.selectedBinId);
 
   // Initialize map
   useEffect(() => {
@@ -124,41 +140,78 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
       attributionControl: false,
     });
 
-    const bounds: L.LatLngBoundsExpression = [
-      [0, 0],
-      [700, 1000],
-    ];
-    L.imageOverlay("/campus/campus-map.svg", bounds).addTo(map);
-    map.fitBounds(bounds);
+    L.imageOverlay(CAMPUS_MAP_ASSET, CAMPUS_MAP_BOUNDS).addTo(map);
+    map.setMaxBounds(CAMPUS_MAP_BOUNDS);
+    map.fitBounds(CAMPUS_MAP_BOUNDS);
 
     mapRef.current = map;
+    const markers = markersRef.current;
+    let isDisposed = false;
+    let resizeFrame: number | null = null;
+
+    const safelyInvalidateSize = () => {
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        if (isDisposed || !mapRef.current) return;
+        if (!map.getContainer().isConnected) return;
+        if (!map.getPane("mapPane")) return;
+
+        try {
+          map.invalidateSize({ pan: false });
+        } catch {
+          // Leaflet can throw during fast route/sidebar transitions before panes settle.
+        }
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(safelyInvalidateSize);
+    map.whenReady(() => {
+      if (!isDisposed && containerRef.current) {
+        resizeObserver.observe(containerRef.current);
+        safelyInvalidateSize();
+      }
+    });
 
     return () => {
+      isDisposed = true;
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
-      markersRef.current.clear();
+      markers.clear();
       vehicleMarkerRef.current = null;
       completedLineRef.current = null;
       routeLineRef.current = null;
+      waitingNodeMarkerRef.current = null;
     };
   }, []);
 
   // Update markers when bins change
   const updateMarkers = useCallback(() => {
     const map = mapRef.current;
-    if (!map || bins.length === 0) return;
+    if (!map) return;
+    const activeIds = new Set(bins.map((bin) => bin.id));
+
+    for (const [id, marker] of markersRef.current) {
+      if (!activeIds.has(id)) {
+        map.removeLayer(marker);
+        markersRef.current.delete(id);
+      }
+    }
 
     for (const bin of bins) {
       const isCollected = collectedBinIds?.has(bin.id) ?? false;
+      const isSelected = selectedBinId === bin.id;
       const existing = markersRef.current.get(bin.id);
 
       if (existing) {
-        existing.setIcon(createBinIcon(bin, isCollected));
+        existing.setLatLng([bin.latitude, bin.longitude]);
+        existing.setIcon(createBinIcon(bin, isCollected, isSelected));
         existing.setPopupContent(getPopupContent(bin));
       } else {
         const marker = L.marker([bin.latitude, bin.longitude], {
-          icon: createBinIcon(bin, isCollected),
+          icon: createBinIcon(bin, isCollected, isSelected),
         })
           .addTo(map)
           .bindPopup(getPopupContent(bin), {
@@ -170,11 +223,58 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
         markersRef.current.set(bin.id, marker);
       }
     }
-  }, [bins, selectBin, collectedBinIds]);
+  }, [bins, selectBin, collectedBinIds, selectedBinId]);
 
   useEffect(() => {
     updateMarkers();
   }, [updateMarkers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (waitingNodeMarkerRef.current) {
+      map.removeLayer(waitingNodeMarkerRef.current);
+      waitingNodeMarkerRef.current = null;
+    }
+
+    if (!waitingNode) return;
+
+    const waitingIcon = L.divIcon({
+      className: "custom-waiting-node-marker",
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      html: `
+        <div class="waiting-node-marker">
+          <span>W</span>
+        </div>
+      `,
+    });
+
+    waitingNodeMarkerRef.current = L.marker(
+      [waitingNode.latitude, waitingNode.longitude],
+      { icon: waitingIcon, zIndexOffset: 900 }
+    )
+      .addTo(map)
+      .bindPopup(
+        `<div style="font-family: system-ui; font-size: 12px; min-width: 140px;">
+          <div style="font-weight: 700; margin-bottom: 4px;">Bekleme Dugumu</div>
+          <div style="color: #e2e8f0;">${waitingNode.label}</div>
+        </div>`,
+        { className: "dark-popup", maxWidth: 220 }
+      );
+  }, [waitingNode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || selectedBinId == null) return;
+
+    const marker = markersRef.current.get(selectedBinId);
+    if (!marker) return;
+
+    map.panTo(marker.getLatLng(), { animate: true, duration: 0.35 });
+    marker.openPopup();
+  }, [selectedBinId]);
 
   // Draw route (when not collecting)
   useEffect(() => {
@@ -214,6 +314,10 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
         opacity: 0.8,
         dashArray: "8, 8",
       }).addTo(map);
+      map.fitBounds(L.latLngBounds(latlngs).pad(0.15), {
+        animate: true,
+        maxZoom: 1,
+      });
     }
   }, [routePoints, collectingIndex]);
 
@@ -343,6 +447,10 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
           background: transparent !important;
           border: none !important;
         }
+        .custom-waiting-node-marker {
+          background: transparent !important;
+          border: none !important;
+        }
         .collection-vehicle {
           width: 28px; height: 28px; border-radius: 50%;
           background: #22c55e; border: 3px solid #fff;
@@ -352,6 +460,18 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
         }
         .bin-collected {
           animation: bin-collected-pop 0.4s ease-out, collected-ring 0.6s ease-out;
+        }
+        .waiting-node-marker {
+          width: 34px; height: 34px; border-radius: 50%;
+          background: #0f172a;
+          border: 2px solid #38bdf8;
+          color: #38bdf8;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 700;
+          box-shadow: 0 0 0 4px rgba(56,189,248,0.16);
         }
       `}</style>
       <div ref={containerRef} className="w-full h-full rounded-xl" />

@@ -5,7 +5,7 @@ import { Pool } from "pg";
 const pool = new Pool({
   connectionString:
     process.env.DATABASE_URL ||
-    "postgresql://yusufayik@localhost:5432/cop_otomasyon",
+    "postgresql://postgres:postgres@localhost:5432/cop_otomasyon",
 });
 
 async function seed() {

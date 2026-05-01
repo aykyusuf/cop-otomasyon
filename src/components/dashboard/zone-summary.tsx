@@ -2,20 +2,13 @@
 
 import { useSimulationStore } from "@/lib/stores/simulation-store";
 import { FillLevelBar } from "./fill-level-bar";
-
-const zoneConfig: Record<string, { label: string; color: string }> = {
-  muhendislik: { label: "Muhendislik", color: "#3b82f6" },
-  fen: { label: "Fen", color: "#8b5cf6" },
-  edebiyat: { label: "Edebiyat", color: "#f59e0b" },
-  yemekhane: { label: "Yemekhane", color: "#ef4444" },
-  kutuphane: { label: "Kutuphane", color: "#10b981" },
-  spor: { label: "Spor", color: "#06b6d4" },
-};
+import { ZONE_OPTIONS } from "@/lib/simulation/site-config";
 
 export function ZoneSummary() {
   const bins = useSimulationStore((s) => s.bins);
 
-  const zones = Object.entries(zoneConfig).map(([key, config]) => {
+  const zones = ZONE_OPTIONS.map((config) => {
+    const key = config.key;
     const zoneBins = bins.filter((b) => b.zone === key);
     const avgFill =
       zoneBins.length > 0
@@ -25,7 +18,8 @@ export function ZoneSummary() {
 
     return {
       key,
-      ...config,
+      label: config.label,
+      color: config.color,
       binCount: zoneBins.length,
       avgFill,
       criticalCount: zoneBins.filter((b) => b.status === "critical").length,
