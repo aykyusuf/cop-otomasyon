@@ -20,10 +20,19 @@ const SPEED_PX_PER_MIN = 100;
 // Time per collection stop (minutes)
 const STOP_TIME_MIN = 2;
 
+interface OptimizeRouteOptions {
+  startPoint?: Point;
+  endPoint?: Point;
+}
+
 export function optimizeRoute(
   allBins: WasteBin[],
-  threshold: number = 70
+  threshold: number = 70,
+  options: OptimizeRouteOptions = {}
 ): RouteOptimizationResult {
+  const startPoint = options.startPoint || DEPOT_POINT;
+  const endPoint = options.endPoint || DEPOT_POINT;
+
   // Filter bins above threshold
   const bins = allBins.filter(
     (b) =>
@@ -44,11 +53,14 @@ export function optimizeRoute(
     };
   }
 
-  // Build points array: depot + bins
-  const points: Point[] = [DEPOT_POINT, ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude }))];
+  // Build points array: start + bins
+  const points: Point[] = [
+    startPoint,
+    ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude })),
+  ];
   const distMatrix = buildDistanceMatrix(points);
 
-  // Nearest Neighbor from depot (index 0)
+  // Nearest Neighbor from start point (index 0)
   const nn = nearestNeighborTSP(distMatrix, 0);
 
   // 2-opt improvement
@@ -62,9 +74,9 @@ export function optimizeRoute(
 
   // Build route points (depot -> bins -> depot)
   const routePoints: Point[] = [
-    DEPOT_POINT,
+    startPoint,
     ...orderedBins.map((b) => ({ latitude: b.latitude, longitude: b.longitude })),
-    DEPOT_POINT,
+    endPoint,
   ];
 
   const distance = totalRouteDistance(routePoints);

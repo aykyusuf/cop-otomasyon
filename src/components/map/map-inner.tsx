@@ -9,6 +9,8 @@ import type { WasteBin } from "@/types";
 import {
   CAMPUS_MAP_ASSET,
   CAMPUS_MAP_BOUNDS,
+  DEPOT_LABEL,
+  DEPOT_POINT,
   WASTE_TYPE_LABELS,
   ZONE_CONFIG,
 } from "@/lib/simulation/site-config";
@@ -23,7 +25,9 @@ function getFillColor(fill: number): string {
 function createBinIcon(
   bin: WasteBin,
   collected?: boolean,
-  selected?: boolean
+  selected?: boolean,
+  collecting?: boolean,
+  collectionProgress: number = 0
 ): L.DivIcon {
   if (collected) {
     return L.divIcon({
@@ -51,22 +55,33 @@ function createBinIcon(
   const ring = selected
     ? "box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 18px rgba(34,197,94,0.5); transform: scale(1.08);"
     : "";
+  const collectingRing = collecting
+    ? `background:
+        conic-gradient(#22c55e ${Math.max(0, Math.min(100, collectionProgress))}%, rgba(34,197,94,0.14) 0);
+       box-shadow: 0 0 0 4px rgba(34,197,94,0.18), 0 0 18px rgba(34,197,94,0.35);`
+    : "";
 
   return L.divIcon({
     className: "custom-bin-marker",
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
     popupAnchor: [0, -20],
     html: `
-      <div class="${pulseClass}" style="
-        width: 36px; height: 36px; border-radius: 50%;
-        background: ${color}20; border: 2px solid ${color};
+      <div style="
+        width: 46px; height: 46px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-size: 10px; font-weight: 700; color: ${color};
-        cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
-        ${ring}
+        ${collectingRing}
       ">
-        ${Math.round(bin.current_fill_percent)}%
+        <div class="${pulseClass}" style="
+          width: 36px; height: 36px; border-radius: 50%;
+          background: ${color}20; border: 2px solid ${color};
+          display: flex; align-items: center; justify-content: center;
+          font-size: 10px; font-weight: 700; color: ${color};
+          cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+          ${ring}
+        ">
+          ${Math.round(bin.current_fill_percent)}%
+        </div>
       </div>
     `,
   });
@@ -106,14 +121,20 @@ interface MapInnerProps {
   routePoints?: { latitude: number; longitude: number }[];
   collectingIndex?: number;
   collectedBinIds?: Set<number>;
+  collectingBinId?: number | null;
+  collectionProgress?: number;
   waitingNode?: { latitude: number; longitude: number; label: string } | null;
+  waitingNodeHint?: string | null;
 }
 
 export default function MapInner({
   routePoints,
   collectingIndex,
   collectedBinIds,
+  collectingBinId,
+  collectionProgress = 0,
   waitingNode,
+  waitingNodeHint,
 }: MapInnerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,7 +143,11 @@ export default function MapInner({
   const vehicleMarkerRef = useRef<L.Marker | null>(null);
   const completedLineRef = useRef<L.Polyline | null>(null);
   const waitingNodeMarkerRef = useRef<L.Marker | null>(null);
+  const waitingZoneRef = useRef<L.CircleMarker | null>(null);
+  const depotMarkerRef = useRef<L.Marker | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const previousCollectingIndexRef = useRef<number | null>(null);
+  const previousRouteKeyRef = useRef<string>("");
 
   const bins = useSimulationStore((s) => s.bins);
   const selectBin = useUIStore((s) => s.selectBin);
@@ -143,6 +168,30 @@ export default function MapInner({
     L.imageOverlay(CAMPUS_MAP_ASSET, CAMPUS_MAP_BOUNDS).addTo(map);
     map.setMaxBounds(CAMPUS_MAP_BOUNDS);
     map.fitBounds(CAMPUS_MAP_BOUNDS);
+
+    const depotIcon = L.divIcon({
+      className: "custom-depot-marker",
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+      html: `
+        <div class="depot-marker">
+          <span>D</span>
+        </div>
+      `,
+    });
+
+    depotMarkerRef.current = L.marker(
+      [DEPOT_POINT.latitude, DEPOT_POINT.longitude],
+      { icon: depotIcon, zIndexOffset: 850 }
+    )
+      .addTo(map)
+      .bindPopup(
+        `<div style="font-family: system-ui; font-size: 12px; min-width: 120px;">
+          <div style="font-weight: 700; margin-bottom: 4px;">${DEPOT_LABEL}</div>
+          <div style="color: #e2e8f0;">Toplama araci baslangic ve donus noktasi</div>
+        </div>`,
+        { className: "dark-popup", maxWidth: 220 }
+      );
 
     mapRef.current = map;
     const markers = markersRef.current;
@@ -184,6 +233,10 @@ export default function MapInner({
       completedLineRef.current = null;
       routeLineRef.current = null;
       waitingNodeMarkerRef.current = null;
+      waitingZoneRef.current = null;
+      depotMarkerRef.current = null;
+      previousCollectingIndexRef.current = null;
+      previousRouteKeyRef.current = "";
     };
   }, []);
 
@@ -203,15 +256,24 @@ export default function MapInner({
     for (const bin of bins) {
       const isCollected = collectedBinIds?.has(bin.id) ?? false;
       const isSelected = selectedBinId === bin.id;
+      const isCollecting = collectingBinId === bin.id;
       const existing = markersRef.current.get(bin.id);
 
       if (existing) {
         existing.setLatLng([bin.latitude, bin.longitude]);
-        existing.setIcon(createBinIcon(bin, isCollected, isSelected));
+        existing.setIcon(
+          createBinIcon(bin, isCollected, isSelected, isCollecting, collectionProgress)
+        );
         existing.setPopupContent(getPopupContent(bin));
       } else {
         const marker = L.marker([bin.latitude, bin.longitude], {
-          icon: createBinIcon(bin, isCollected, isSelected),
+          icon: createBinIcon(
+            bin,
+            isCollected,
+            isSelected,
+            isCollecting,
+            collectionProgress
+          ),
         })
           .addTo(map)
           .bindPopup(getPopupContent(bin), {
@@ -223,7 +285,7 @@ export default function MapInner({
         markersRef.current.set(bin.id, marker);
       }
     }
-  }, [bins, selectBin, collectedBinIds, selectedBinId]);
+  }, [bins, selectBin, collectedBinIds, selectedBinId, collectingBinId, collectionProgress]);
 
   useEffect(() => {
     updateMarkers();
@@ -236,6 +298,10 @@ export default function MapInner({
     if (waitingNodeMarkerRef.current) {
       map.removeLayer(waitingNodeMarkerRef.current);
       waitingNodeMarkerRef.current = null;
+    }
+    if (waitingZoneRef.current) {
+      map.removeLayer(waitingZoneRef.current);
+      waitingZoneRef.current = null;
     }
 
     if (!waitingNode) return;
@@ -260,10 +326,30 @@ export default function MapInner({
         `<div style="font-family: system-ui; font-size: 12px; min-width: 140px;">
           <div style="font-weight: 700; margin-bottom: 4px;">Bekleme Dugumu</div>
           <div style="color: #e2e8f0;">${waitingNode.label}</div>
+          ${waitingNodeHint ? `<div style="margin-top: 6px; color: #94a3b8;">${waitingNodeHint}</div>` : ""}
         </div>`,
         { className: "dark-popup", maxWidth: 220 }
       );
-  }, [waitingNode]);
+
+    waitingZoneRef.current = L.circleMarker(
+      [waitingNode.latitude, waitingNode.longitude],
+      {
+        radius: 32,
+        color: "#38bdf8",
+        weight: 1.5,
+        fillColor: "#38bdf8",
+        fillOpacity: 0.08,
+        opacity: 0.7,
+        dashArray: "6, 6",
+      }
+    ).addTo(map);
+
+    map.panTo([waitingNode.latitude, waitingNode.longitude], {
+      animate: true,
+      duration: 0.35,
+    });
+    waitingNodeMarkerRef.current.openPopup();
+  }, [waitingNode, waitingNodeHint]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -297,6 +383,7 @@ export default function MapInner({
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    previousCollectingIndexRef.current = null;
 
     if (routeLineRef.current) {
       map.removeLayer(routeLineRef.current);
@@ -314,6 +401,9 @@ export default function MapInner({
         opacity: 0.8,
         dashArray: "8, 8",
       }).addTo(map);
+      previousRouteKeyRef.current = routePoints
+        .map((point) => `${point.latitude},${point.longitude}`)
+        .join("|");
       map.fitBounds(L.latLngBounds(latlngs).pad(0.15), {
         animate: true,
         maxZoom: 1,
@@ -326,6 +416,18 @@ export default function MapInner({
     const map = mapRef.current;
     if (!map || !routePoints || routePoints.length < 2) return;
     if (collectingIndex === undefined || collectingIndex < 0) return;
+    const routeKey = routePoints
+      .map((point) => `${point.latitude},${point.longitude}`)
+      .join("|");
+    const hasRouteChanged = previousRouteKeyRef.current !== routeKey;
+    const previousIndex = previousCollectingIndexRef.current;
+    const shouldResetVehicle =
+      hasRouteChanged ||
+      previousIndex === null ||
+      collectingIndex <= 1 ||
+      collectingIndex < previousIndex;
+
+    previousRouteKeyRef.current = routeKey;
 
     // Create vehicle marker if not exists
     if (!vehicleMarkerRef.current) {
@@ -347,10 +449,25 @@ export default function MapInner({
       ).addTo(map);
     }
 
+    if (shouldResetVehicle) {
+      vehicleMarkerRef.current.setLatLng([
+        routePoints[0].latitude,
+        routePoints[0].longitude,
+      ]);
+      if (completedLineRef.current) {
+        map.removeLayer(completedLineRef.current);
+        completedLineRef.current = null;
+      }
+    }
+
     // Animate vehicle movement
     const fromIdx = Math.max(0, collectingIndex - 1);
     const toIdx = Math.min(collectingIndex, routePoints.length - 1);
-    const from = routePoints[fromIdx];
+    const markerLatLng = vehicleMarkerRef.current.getLatLng();
+    const from =
+      !shouldResetVehicle && previousIndex !== null && collectingIndex === previousIndex + 1
+        ? { latitude: markerLatLng.lat, longitude: markerLatLng.lng }
+        : routePoints[fromIdx];
     const to = routePoints[toIdx];
 
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -369,6 +486,8 @@ export default function MapInner({
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        previousCollectingIndexRef.current = collectingIndex;
       }
     };
     animFrameRef.current = requestAnimationFrame(animate);
@@ -451,6 +570,10 @@ export default function MapInner({
           background: transparent !important;
           border: none !important;
         }
+        .custom-depot-marker {
+          background: transparent !important;
+          border: none !important;
+        }
         .collection-vehicle {
           width: 28px; height: 28px; border-radius: 50%;
           background: #22c55e; border: 3px solid #fff;
@@ -472,6 +595,19 @@ export default function MapInner({
           font-size: 11px;
           font-weight: 700;
           box-shadow: 0 0 0 4px rgba(56,189,248,0.16);
+          animation: waiting-node-pulse 1.6s ease-in-out infinite;
+        }
+        .depot-marker {
+          width: 40px; height: 40px; border-radius: 12px;
+          background: rgba(163, 230, 53, 0.12);
+          border: 2px dashed #a3e635;
+          color: #a3e635;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          font-weight: 800;
+          box-shadow: 0 0 0 4px rgba(163,230,53,0.10);
         }
       `}</style>
       <div ref={containerRef} className="w-full h-full rounded-xl" />

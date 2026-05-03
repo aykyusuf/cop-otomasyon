@@ -29,6 +29,8 @@ interface SimulationStore {
   tick: () => void;
   collectBin: (binId: number) => void;
   collectBins: (binIds: number[]) => void;
+  replaceBins: (bins: WasteBin[]) => void;
+  advanceTicks: (steps: number) => void;
   clearPendingAlerts: () => void;
   setAlerts: (alerts: Alert[]) => void;
 }
@@ -120,4 +122,14 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       ),
     }));
   },
+
+  replaceBins: (bins) =>
+    set({
+      bins: bins.map(normalizeBin),
+    }),
+
+  advanceTicks: (steps) =>
+    set((state) => ({
+      tickCount: state.tickCount + Math.max(0, steps),
+    })),
 }));

@@ -7,28 +7,99 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
-import type { RouteOptimizationResult } from "@/lib/algorithms/route-optimizer";
+import {
+  optimizeRoute,
+  type RouteOptimizationResult,
+} from "@/lib/algorithms/route-optimizer";
 import {
   evaluateWaitingScenarios,
   type WaitingScenarioResult,
 } from "@/lib/simulation/waiting-strategies";
+import {
+  DECISION_MODE_CONFIG,
+  type DecisionMode,
+} from "@/lib/simulation/decision-engine";
+import {
+  evaluateAlternativePlans,
+  type AlternativePlanResult,
+} from "@/lib/simulation/route-variants";
+import { projectBinForward } from "@/lib/simulation/production-model";
+import { DEPOT_POINT } from "@/lib/simulation/site-config";
 import { Route, Play, CheckCircle, MapPin, Clock, Ruler, PauseCircle } from "lucide-react";
 import { toast } from "sonner";
 import { FillLevelBar } from "@/components/dashboard/fill-level-bar";
 
+type RouteExecutionPhase = "idle" | "moving-to-node" | "waiting" | "collecting";
+const MOVE_TO_NODE_MS = 1400;
+const WAIT_TICK_MS = 1400;
+const COLLECTION_STOP_MS = 1200;
+const COLLECTION_PROGRESS_STEPS = 6;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resetRouteState(
+  setResult: (value: RouteOptimizationResult | null) => void,
+  setScenarioResults: (value: WaitingScenarioResult[]) => void,
+  setSelectedScenarioId: (value: string | null) => void,
+  setTravelIndex: (value: number) => void,
+  setCollectedCount: (value: number) => void,
+  setCollectedBinIds: (value: Set<number>) => void,
+  setCollectingBinId: (value: number | null) => void,
+  setCollectionProgress: (value: number) => void,
+  setCollecting: (value: boolean) => void,
+  setPhase: (value: RouteExecutionPhase) => void,
+  setWaitProgress: (value: number) => void,
+  setWaitStep: (value: number) => void,
+  setMapRouteOverride: (value: { latitude: number; longitude: number }[] | null) => void,
+  setVehicleStepIndex: (value: number | undefined) => void
+) {
+  setResult(null);
+  setScenarioResults([]);
+  setSelectedScenarioId(null);
+  setTravelIndex(0);
+  setCollectedCount(0);
+  setCollectedBinIds(new Set());
+  setCollectingBinId(null);
+  setCollectionProgress(0);
+  setCollecting(false);
+  setPhase("idle");
+  setWaitProgress(0);
+  setWaitStep(0);
+  setMapRouteOverride(null);
+  setVehicleStepIndex(undefined);
+}
+
 export default function RotalarPage() {
   const bins = useSimulationStore((s) => s.bins);
   const collectBin = useSimulationStore((s) => s.collectBin);
+  const replaceBins = useSimulationStore((s) => s.replaceBins);
+  const advanceTicks = useSimulationStore((s) => s.advanceTicks);
   const speed = useSimulationStore((s) => s.speed);
   const tickCount = useSimulationStore((s) => s.tickCount);
   const [threshold, setThreshold] = useState(70);
+  const [decisionMode, setDecisionMode] = useState<DecisionMode>("balanced");
+  const [alternativePlans, setAlternativePlans] = useState<AlternativePlanResult[]>([]);
   const [result, setResult] = useState<RouteOptimizationResult | null>(null);
   const [scenarioResults, setScenarioResults] = useState<WaitingScenarioResult[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  const [collecting, setCollecting] = useState(false);
+  const [, setCollecting] = useState(false);
+  const [phase, setPhase] = useState<RouteExecutionPhase>("idle");
+  const [travelIndex, setTravelIndex] = useState(0);
   const [collectedCount, setCollectedCount] = useState(0);
   const [collectedBinIds, setCollectedBinIds] = useState<Set<number>>(new Set());
+  const [collectingBinId, setCollectingBinId] = useState<number | null>(null);
+  const [collectionProgress, setCollectionProgress] = useState(0);
+  const [waitProgress, setWaitProgress] = useState(0);
+  const [waitStep, setWaitStep] = useState(0);
+  const [mapRouteOverride, setMapRouteOverride] = useState<
+    { latitude: number; longitude: number }[] | null
+  >(null);
+  const [vehicleStepIndex, setVehicleStepIndex] = useState<number | undefined>(undefined);
   const collectingRef = useRef(false);
+  const isExecutingRoute = phase !== "idle";
+  const isCollectingPhase = phase === "collecting";
 
   // Cancel collection on unmount
   useEffect(() => {
@@ -37,16 +108,39 @@ export default function RotalarPage() {
 
   const handleGenerate = () => {
     collectingRef.current = false;
-    setCollectedBinIds(new Set());
-    setCollecting(false);
+    resetRouteState(
+      setResult,
+      setScenarioResults,
+      setSelectedScenarioId,
+      setTravelIndex,
+      setCollectedCount,
+      setCollectedBinIds,
+      setCollectingBinId,
+      setCollectionProgress,
+      setCollecting,
+      setPhase,
+      setWaitProgress,
+      setWaitStep,
+      setMapRouteOverride,
+      setVehicleStepIndex
+    );
+    setAlternativePlans([]);
 
-    const scenarios = evaluateWaitingScenarios(bins, threshold, speed, tickCount);
-    const bestScenario = scenarios[0] || null;
+    const plans = evaluateAlternativePlans(
+      bins,
+      threshold,
+      speed,
+      tickCount
+    );
+    const activePlan =
+      plans.find((plan) => plan.decisionMode === decisionMode) || plans[0] || null;
+    const scenarios = activePlan?.scenarios || [];
+    const bestScenario = activePlan?.recommendedScenario || null;
 
+    setAlternativePlans(plans);
     setScenarioResults(scenarios);
     setSelectedScenarioId(bestScenario?.scenario.id || null);
     setResult(bestScenario?.route || null);
-    setCollectedCount(0);
 
     if (!bestScenario || bestScenario.route.orderedBins.length === 0) {
       toast.info("Esik ustunde kutu bulunamadi.");
@@ -60,23 +154,142 @@ export default function RotalarPage() {
   };
 
   const handleCollect = async () => {
-    if (!result || result.orderedBins.length === 0) return;
-    setCollecting(true);
+    const baseScenario =
+      scenarioResults.find((item) => item.scenario.id === selectedScenarioId) || null;
+
+    if (!result || result.orderedBins.length === 0 || !baseScenario) return;
     collectingRef.current = true;
+    setTravelIndex(0);
     setCollectedCount(0);
     setCollectedBinIds(new Set());
+    setCollectingBinId(null);
+    setCollectionProgress(0);
+    setWaitProgress(0);
+    setWaitStep(0);
+    setVehicleStepIndex(undefined);
 
-    for (let i = 0; i < result.orderedBins.length; i++) {
+    let activeRoute = result;
+    if (baseScenario.scenario.waitTicks > 0 && baseScenario.waitingNode) {
+      setPhase("moving-to-node");
+      setMapRouteOverride([
+        DEPOT_POINT,
+        {
+          latitude: baseScenario.waitingNode.latitude,
+          longitude: baseScenario.waitingNode.longitude,
+        },
+      ]);
+      setVehicleStepIndex(1);
+      toast.info(`${baseScenario.waitingNode.label} noktasina geciliyor.`);
+      await sleep(MOVE_TO_NODE_MS);
+
+      if (!collectingRef.current) {
+        setCollecting(false);
+        setPhase("idle");
+        setMapRouteOverride(null);
+        setVehicleStepIndex(undefined);
+        setCollectingBinId(null);
+        setCollectionProgress(0);
+        return;
+      }
+
+      setPhase("waiting");
+      toast.info(
+        `${baseScenario.scenario.label} uygulanıyor. Kutular ${baseScenario.scenario.waitTicks} cevrim ileri projekte edilecek.`
+      );
+
+      let projectedBins = bins;
+      let projectedTickCount = tickCount;
+
+      for (let step = 1; step <= baseScenario.scenario.waitTicks; step++) {
+        setWaitStep(step);
+        await sleep(WAIT_TICK_MS);
+        if (!collectingRef.current) break;
+
+        projectedBins = projectedBins.map((bin) =>
+          projectBinForward(bin, speed, projectedTickCount, 1)
+        );
+        projectedTickCount += 1;
+        replaceBins(projectedBins);
+        advanceTicks(1);
+        setWaitProgress((step / baseScenario.scenario.waitTicks) * 100);
+      }
+
+      if (!collectingRef.current) {
+        setCollecting(false);
+        setPhase("idle");
+        setWaitStep(0);
+        setMapRouteOverride(null);
+        setVehicleStepIndex(undefined);
+        setCollectingBinId(null);
+        setCollectionProgress(0);
+        return;
+      }
+
+      const refreshedScenarios = evaluateWaitingScenarios(
+        projectedBins,
+        threshold,
+        speed,
+        projectedTickCount,
+        decisionMode
+      );
+      const dispatchScenario =
+        refreshedScenarios.find((item) => item.scenario.id === "dispatch-now") ||
+        refreshedScenarios[0] ||
+        null;
+
+      activeRoute = optimizeRoute(
+        projectedBins,
+        dispatchScenario?.metrics.effectiveThreshold || threshold,
+        {
+        startPoint: {
+          latitude: baseScenario.waitingNode.latitude,
+          longitude: baseScenario.waitingNode.longitude,
+        },
+      });
+
+      setScenarioResults(refreshedScenarios);
+      setSelectedScenarioId(dispatchScenario?.scenario.id || null);
+      setResult(activeRoute);
+      setMapRouteOverride(null);
+      setVehicleStepIndex(undefined);
+      setWaitProgress(100);
+      setWaitStep(0);
+      toast.success("Bekleme tamamlandi. Rota guncellendi ve toplama basliyor.");
+    }
+
+    setPhase("collecting");
+    setCollecting(true);
+    setMapRouteOverride(null);
+    setVehicleStepIndex(undefined);
+
+    for (let i = 0; i < activeRoute.orderedBins.length; i++) {
       if (!collectingRef.current) break;
 
-      setCollectedCount(i + 1); // trigger vehicle animation FIRST
-      await new Promise((r) => setTimeout(r, 800));
+      setTravelIndex(i + 1);
+      await sleep(800);
+
+      if (!collectingRef.current) break;
+
+      setCollectingBinId(activeRoute.orderedBins[i].id);
+      for (let step = 1; step <= COLLECTION_PROGRESS_STEPS; step++) {
+        setCollectionProgress((step / COLLECTION_PROGRESS_STEPS) * 100);
+        await sleep(COLLECTION_STOP_MS / COLLECTION_PROGRESS_STEPS);
+        if (!collectingRef.current) break;
+      }
 
       if (!collectingRef.current) break;
 
       // Collect bin individually so it visually empties on map
-      collectBin(result.orderedBins[i].id);
-      setCollectedBinIds((prev) => new Set(prev).add(result.orderedBins[i].id));
+      collectBin(activeRoute.orderedBins[i].id);
+      setCollectedBinIds((prev) => new Set(prev).add(activeRoute.orderedBins[i].id));
+      setCollectingBinId(null);
+      setCollectionProgress(0);
+      setCollectedCount(i + 1);
+    }
+
+    if (collectingRef.current && activeRoute.routePoints.length > 1) {
+      setTravelIndex(activeRoute.routePoints.length - 1);
+      await sleep(900);
     }
 
     if (collectingRef.current) {
@@ -88,10 +301,10 @@ export default function RotalarPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
-          totalDistance: result.totalDistance,
-          totalBins: result.orderedBins.length,
-          estimatedDurationMin: result.estimatedDurationMin,
-          stops: result.orderedBins.map((b, i) => ({
+          totalDistance: activeRoute.totalDistance,
+          totalBins: activeRoute.orderedBins.length,
+          estimatedDurationMin: activeRoute.estimatedDurationMin,
+          stops: activeRoute.orderedBins.map((b, i) => ({
             binId: b.id,
             stopOrder: i + 1,
           })),
@@ -99,13 +312,36 @@ export default function RotalarPage() {
       }).catch(console.error);
     }
 
-    setCollecting(false);
     collectingRef.current = false;
+    resetRouteState(
+      setResult,
+      setScenarioResults,
+      setSelectedScenarioId,
+      setTravelIndex,
+      setCollectedCount,
+      setCollectedBinIds,
+      setCollectingBinId,
+      setCollectionProgress,
+      setCollecting,
+      setPhase,
+      setWaitProgress,
+      setWaitStep,
+      setMapRouteOverride,
+      setVehicleStepIndex
+    );
   };
 
   const selectedScenario =
     scenarioResults.find((item) => item.scenario.id === selectedScenarioId) || null;
-  const routePoints = result?.routePoints;
+  const selectedPlan =
+    alternativePlans.find((plan) => plan.decisionMode === decisionMode) || null;
+  const routePoints = mapRouteOverride || result?.routePoints;
+  const activeMapStep =
+    phase === "moving-to-node" || phase === "waiting"
+      ? vehicleStepIndex
+      : isCollectingPhase
+        ? travelIndex
+        : undefined;
 
   return (
     <>
@@ -117,18 +353,48 @@ export default function RotalarPage() {
             className="w-full h-full rounded-xl border border-border"
             routePoints={routePoints}
             waitingNode={selectedScenario?.waitingNode || null}
-            collectingIndex={collecting ? collectedCount : undefined}
-            collectedBinIds={collecting || collectedBinIds.size > 0 ? collectedBinIds : undefined}
+            waitingNodeHint={
+              selectedScenario?.waitingNode
+                ? "Arac dogrudan kutuda degil, bu bolgeyi tarayan node noktasinda bekler."
+                : null
+            }
+            collectingIndex={activeMapStep}
+            collectingBinId={collectingBinId}
+            collectionProgress={collectionProgress}
+            collectedBinIds={isExecutingRoute || collectedBinIds.size > 0 ? collectedBinIds : undefined}
           />
         </div>
 
         {/* Side panel */}
-        <div className="max-h-[44vh] border-t p-4 overflow-y-auto space-y-4 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
+        <div className="h-[44vh] min-h-[260px] overflow-y-auto border-t p-4 space-y-4 lg:h-full lg:min-h-0 lg:max-h-full lg:w-80 lg:border-l lg:border-t-0 lg:overflow-y-auto">
           {/* Generator */}
           <div className="glass rounded-xl p-4 space-y-4">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <Route className="w-4 h-4" /> Rota Olustur
             </h3>
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">
+                Karar Profili
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.values(DECISION_MODE_CONFIG).map((mode) => (
+                  <Button
+                    key={mode.id}
+                    type="button"
+                    size="sm"
+                    variant={decisionMode === mode.id ? "default" : "outline"}
+                    disabled={isExecutingRoute}
+                    className="h-auto py-2 text-xs"
+                    onClick={() => setDecisionMode(mode.id)}
+                  >
+                    {mode.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {DECISION_MODE_CONFIG[decisionMode].description}
+              </p>
+            </div>
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">
                 Doluluk Esigi: {threshold}%
@@ -146,6 +412,63 @@ export default function RotalarPage() {
             </Button>
           </div>
 
+          {alternativePlans.length > 0 && (
+            <div className="glass rounded-xl p-4 space-y-3">
+              <h3 className="font-semibold text-sm">Alternatif Planlar</h3>
+              <div className="space-y-2">
+                {alternativePlans.map((plan) => {
+                  const recommended = plan.recommendedScenario;
+                  const activePlanCard = plan.decisionMode === decisionMode;
+
+                  return (
+                    <button
+                      key={plan.decisionMode}
+                      disabled={isExecutingRoute || !recommended}
+                      onClick={() => {
+                        if (!recommended) return;
+                        setDecisionMode(plan.decisionMode);
+                        setScenarioResults(plan.scenarios);
+                        setSelectedScenarioId(recommended.scenario.id);
+                        setResult(recommended.route);
+                      }}
+                      className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                        activePlanCard ? "border-sky-500 bg-sky-500/8" : "hover:bg-accent"
+                      } ${isExecutingRoute ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {DECISION_MODE_CONFIG[plan.decisionMode].label}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {DECISION_MODE_CONFIG[plan.decisionMode].description}
+                          </p>
+                        </div>
+                        {recommended && (
+                          <Badge variant="outline" className="text-sky-500">
+                            {recommended.scenario.label}
+                          </Badge>
+                        )}
+                      </div>
+                      {recommended ? (
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                          <span>{recommended.route.orderedBins.length} durak</span>
+                          <span>{recommended.route.totalDistance.toFixed(0)} px</span>
+                          <span>{recommended.projectedCriticalBins} kritik</span>
+                          <span>Skor {recommended.score.toFixed(0)}</span>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          Uygun plan bulunamadi.
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {scenarioResults.length > 0 && (
             <div className="glass rounded-xl p-4 space-y-3">
               <h3 className="font-semibold text-sm">Bekleme Senaryolari</h3>
@@ -160,6 +483,7 @@ export default function RotalarPage() {
                   return (
                     <button
                       key={scenarioResult.scenario.id}
+                      disabled={isExecutingRoute}
                       onClick={() => {
                         setSelectedScenarioId(scenarioResult.scenario.id);
                         setResult(scenarioResult.route);
@@ -170,6 +494,8 @@ export default function RotalarPage() {
                       }}
                       className={`w-full rounded-lg border p-3 text-left transition-colors ${
                         active ? "border-emerald-500 bg-emerald-500/8" : "hover:bg-accent"
+                      } ${isExecutingRoute ? "cursor-not-allowed opacity-60" : ""}${
+                        phase === "waiting" && active ? " ring-1 ring-amber-400/50" : ""
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
@@ -190,6 +516,10 @@ export default function RotalarPage() {
                         <span>{scenarioResult.route.totalDistance.toFixed(0)} px</span>
                         <span>{scenarioResult.projectedCriticalBins} kritik kutu</span>
                         <span>{scenarioResult.overflowRisk} tasma riski</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                        <span>Esik %{scenarioResult.metrics.effectiveThreshold}</span>
+                        <span>Sure ~{scenarioResult.route.estimatedDurationMin} dk</span>
                       </div>
                       {scenarioResult.waitingNode && (
                         <p className="mt-2 text-xs text-emerald-600">
@@ -218,11 +548,41 @@ export default function RotalarPage() {
                         Skor {selectedScenario.score.toFixed(0)}
                       </Badge>
                     </div>
-                    {selectedScenario.waitingNode && (
+                    <p className="mt-2">
+                      Karar profili: {DECISION_MODE_CONFIG[selectedScenario.decisionMode].label}
+                      , esik %{selectedScenario.metrics.effectiveThreshold}
+                    </p>
+                    {selectedPlan?.recommendedScenario && (
                       <p className="mt-2">
-                        Arac once {selectedScenario.waitingNode.label} noktasinda bekleyip sonra rotaya cikabilir.
+                        Bu profilin onerilen plani: {selectedPlan.recommendedScenario.scenario.label}
                       </p>
                     )}
+                    {selectedScenario.waitingNode && (
+                      <p className="mt-2">
+                        Arac kutuda degil, once {selectedScenario.waitingNode.label} node noktasinda
+                        bekleyip sonra cevredeki kutular icin rotaya cikabilir.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {phase === "moving-to-node" && selectedScenario?.waitingNode && (
+                  <div className="rounded-lg border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+                    Arac bekleme dugumune gidiyor: {selectedScenario.waitingNode.label}
+                  </div>
+                )}
+                {phase === "waiting" && selectedScenario && (
+                  <div className="space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                    <p>
+                      {selectedScenario.waitingNode?.label || "Secili dugum"} noktasinda bekleniyor.
+                      Sistem doluluklari ileri projekte edip rotayi yeniden hesapliyor.
+                    </p>
+                    <p className="font-medium text-foreground">
+                      Bekleme adimi: {waitStep}/{selectedScenario.scenario.waitTicks}
+                    </p>
+                    <FillLevelBar
+                      value={waitProgress}
+                      label={`${selectedScenario.scenario.waitTicks} cevrimlik bekleme uygulanıyor`}
+                    />
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -248,15 +608,24 @@ export default function RotalarPage() {
                   </div>
                 </div>
 
-                {collecting ? (
+                {isCollectingPhase ? (
                   <div className="space-y-2">
                     <FillLevelBar
                       value={
-                        (collectedCount / result.orderedBins.length) * 100
+                        (collectedCount / Math.max(1, result.orderedBins.length)) * 100
                       }
                       label={`${collectedCount}/${result.orderedBins.length} toplandi`}
                     />
                   </div>
+                ) : isExecutingRoute ? (
+                  <Button
+                    disabled
+                    className="w-full"
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {phase === "moving-to-node" ? "Bekleme noktasina gidiliyor" : "Bekleme simulasyonu suruyor"}
+                  </Button>
                 ) : (
                   <Button
                     onClick={handleCollect}
@@ -271,30 +640,32 @@ export default function RotalarPage() {
               {/* Stop list */}
               <div className="glass rounded-xl p-4 space-y-2">
                 <h3 className="font-semibold text-sm">Duraklar</h3>
-                {result.orderedBins.map((bin, i) => (
-                  <div
-                    key={bin.id}
-                    className="flex items-center gap-3 p-2 rounded-lg text-sm"
-                  >
-                    <span
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        collecting && i < collectedCount
-                          ? "bg-emerald-500/20 text-emerald-500"
-                          : "bg-muted text-muted-foreground"
-                      }`}
+                <div className="max-h-72 overflow-y-auto pr-1 space-y-2">
+                  {result.orderedBins.map((bin, i) => (
+                    <div
+                      key={bin.id}
+                      className="flex items-center gap-3 p-2 rounded-lg text-sm"
                     >
-                      {collecting && i < collectedCount ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : (
-                        i + 1
-                      )}
-                    </span>
-                    <span className="flex-1 font-medium">{bin.name}</span>
-                    <span className="text-muted-foreground">
-                      {bin.current_fill_percent.toFixed(0)}%
-                    </span>
-                  </div>
-                ))}
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          isCollectingPhase && i < collectedCount
+                            ? "bg-emerald-500/20 text-emerald-500"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isCollectingPhase && i < collectedCount ? (
+                          <CheckCircle className="w-4 h-4" />
+                        ) : (
+                          i + 1
+                        )}
+                      </span>
+                      <span className="flex-1 font-medium">{bin.name}</span>
+                      <span className="text-muted-foreground">
+                        {bin.current_fill_percent.toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}

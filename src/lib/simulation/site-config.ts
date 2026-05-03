@@ -32,6 +32,8 @@ export const DEPOT_POINT: Point = {
   longitude: 500,
 };
 
+export const DEPOT_LABEL = "Depo";
+
 export const WAITING_NODES: WaitingNode[] = [
   {
     id: "north-west-hub",

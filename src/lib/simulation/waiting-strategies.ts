@@ -3,6 +3,13 @@ import {
   optimizeRoute,
   type RouteOptimizationResult,
 } from "@/lib/algorithms/route-optimizer";
+import {
+  buildDecisionMetrics,
+  getDecisionThreshold,
+  scoreDecisionMetrics,
+  type DecisionMode,
+  type ScenarioDecisionMetrics,
+} from "@/lib/simulation/decision-engine";
 import { projectBinForward } from "@/lib/simulation/production-model";
 import { WAITING_NODES, type WaitingNode } from "@/lib/simulation/site-config";
 import type { WasteBin } from "@/types";
@@ -21,6 +28,8 @@ export interface WaitingScenarioResult {
   overflowRisk: number;
   projectedCriticalBins: number;
   waitingNode: WaitingNode | null;
+  decisionMode: DecisionMode;
+  metrics: ScenarioDecisionMetrics;
 }
 
 export const WAITING_SCENARIOS: WaitingScenario[] = [
@@ -98,38 +107,56 @@ function pickWaitingNode(route: RouteOptimizationResult): WaitingNode | null {
     )[0] || null;
 }
 
-function scoreScenario(
-  route: RouteOptimizationResult,
-  overflowRisk: number,
-  waitTicks: number
+function getRouteForScenario(
+  projectedBins: WasteBin[],
+  threshold: number,
+  waitingNode: WaitingNode | null
 ) {
-  const distancePenalty = route.totalDistance * 0.08;
-  const waitPenalty = waitTicks * 14;
-  const overflowPenalty = overflowRisk * 120;
-  const coverageBonus = route.orderedBins.length * 18;
+  const startPoint: Point | undefined = waitingNode
+    ? {
+        latitude: waitingNode.latitude,
+        longitude: waitingNode.longitude,
+      }
+    : undefined;
 
-  return coverageBonus - distancePenalty - waitPenalty - overflowPenalty;
+  return optimizeRoute(projectedBins, threshold, { startPoint });
 }
 
 export function evaluateWaitingScenarios(
   bins: WasteBin[],
   threshold: number,
   speed: 1 | 2 | 4,
-  tickCount: number
+  tickCount: number,
+  decisionMode: DecisionMode = "balanced"
 ): WaitingScenarioResult[] {
+  const effectiveThreshold = getDecisionThreshold(threshold, decisionMode);
+
   return WAITING_SCENARIOS.map((scenario) => {
     const projectedBins = projectBins(bins, speed, tickCount, scenario.waitTicks);
-    const route = optimizeRoute(projectedBins, threshold);
+    const previewRoute = optimizeRoute(projectedBins, effectiveThreshold);
+    const waitingNode =
+      scenario.waitTicks > 0 ? pickWaitingNode(previewRoute) : null;
+    const route = getRouteForScenario(projectedBins, effectiveThreshold, waitingNode);
     const overflowRisk = getOverflowRisk(projectedBins, threshold);
     const projectedCriticalBins = getProjectedCriticalBins(projectedBins);
+    const metrics = buildDecisionMetrics(
+      route,
+      overflowRisk,
+      projectedCriticalBins,
+      scenario.waitTicks,
+      effectiveThreshold,
+      decisionMode
+    );
 
     return {
       scenario,
       route,
       overflowRisk,
       projectedCriticalBins,
-      waitingNode: scenario.waitTicks > 0 ? pickWaitingNode(route) : null,
-      score: scoreScenario(route, overflowRisk, scenario.waitTicks),
+      waitingNode,
+      decisionMode,
+      metrics,
+      score: scoreDecisionMetrics(metrics),
     };
   }).sort((left, right) => right.score - left.score);
 }
