@@ -18,6 +18,7 @@ export function useSimulation() {
     stop,
     reset,
     setSpeed,
+    setTickCount,
     tick,
     clearPendingAlerts,
     setAlerts,
@@ -113,6 +114,7 @@ export function useSimulation() {
     stop,
     reset,
     setSpeed,
+    setTickCount,
     refreshAlerts,
   };
 }

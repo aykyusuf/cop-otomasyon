@@ -32,6 +32,13 @@ export interface WasteBin {
   status: BinStatus;
   zone: string;
   location_type?: LocationType;
+  waste_composition?: {
+    plastic: number;
+    metal: number;
+    organic: number;
+    nonRecyclable: number;
+    hazardous: number;
+  };
   created_at: Date;
   updated_at: Date;
 }

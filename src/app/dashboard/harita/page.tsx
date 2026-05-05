@@ -8,9 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Thermometer, Battery, Trash2 } from "lucide-react";
 import {
+  WASTE_COMPOSITION_COLORS,
+  WASTE_COMPOSITION_LABELS,
   WASTE_TYPE_LABELS,
   ZONE_CONFIG,
 } from "@/lib/simulation/site-config";
+import { normalizeWasteComposition } from "@/lib/simulation/production-model";
 
 function getFillColorClass(fill: number): string {
   if (fill < 25) return "text-green-500";
@@ -24,6 +27,13 @@ export default function HaritaPage() {
   const selectedBinId = useUIStore((s) => s.selectedBinId);
   const selectBin = useUIStore((s) => s.selectBin);
   const selectedBin = bins.find((b) => b.id === selectedBinId);
+  const selectedZoneConfig = selectedBin ? ZONE_CONFIG[selectedBin.zone] : null;
+  const selectedBinComposition = selectedBin
+    ? normalizeWasteComposition(selectedBin.waste_composition)
+    : null;
+  const selectedBinCompositionTotal = selectedBinComposition
+    ? Object.values(selectedBinComposition).reduce((sum, value) => sum + value, 0)
+    : 0;
 
   const critical = bins.filter((b) => b.status === "critical").length;
   const warning = bins.filter((b) => b.status === "warning").length;
@@ -100,6 +110,70 @@ export default function HaritaPage() {
                   {ZONE_CONFIG[selectedBin.zone]?.label || selectedBin.zone}
                 </div>
               </div>
+
+              {selectedZoneConfig && selectedBinComposition && (
+                <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">
+                      {selectedZoneConfig.label} / {selectedBin.name} Kompozisyonu
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {selectedBinCompositionTotal > 0 ? "Canli dagilim" : "Henuz birikim yok"}
+                    </span>
+                  </div>
+
+                  <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+                    {Object.entries(selectedBinComposition).map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="h-full"
+                        style={{
+                          width: `${
+                            selectedBinCompositionTotal > 0
+                              ? (value / selectedBinCompositionTotal) * 100
+                              : 0
+                          }%`,
+                          backgroundColor:
+                            WASTE_COMPOSITION_COLORS[
+                              key as keyof typeof WASTE_COMPOSITION_COLORS
+                            ],
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    {Object.entries(selectedBinComposition).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{
+                              backgroundColor:
+                                WASTE_COMPOSITION_COLORS[
+                                  key as keyof typeof WASTE_COMPOSITION_COLORS
+                                ],
+                            }}
+                          />
+                          <span>
+                            {
+                              WASTE_COMPOSITION_LABELS[
+                                key as keyof typeof WASTE_COMPOSITION_LABELS
+                              ]
+                            }
+                          </span>
+                        </div>
+                        <span className="font-medium text-foreground">
+                          {selectedBinCompositionTotal > 0
+                            ? ((value / selectedBinCompositionTotal) * 100).toFixed(1)
+                            : "0.0"}
+                          %
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground text-center py-8">

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { AlertList } from "@/components/dashboard/alert-list";
@@ -12,12 +13,24 @@ import { Trash2, Percent, Truck, AlertTriangle } from "lucide-react";
 export default function DashboardPage() {
   const bins = useSimulationStore((s) => s.bins);
   const alerts = useSimulationStore((s) => s.alerts);
+  const [collectionsToday, setCollectionsToday] = useState(0);
 
   const totalBins = bins.length;
   const avgFill =
     bins.length > 0
       ? bins.reduce((s, b) => s + b.current_fill_percent, 0) / bins.length
       : 0;
+
+  useEffect(() => {
+    fetch("/api/history")
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.summary) {
+          setCollectionsToday(data.summary.collectionsToday || 0);
+        }
+      })
+      .catch(console.error);
+  }, [alerts.length, bins.length]);
 
   return (
     <>
@@ -42,9 +55,13 @@ export default function DashboardPage() {
           />
           <StatsCard
             title="Toplama Bugun"
-            value={0}
+            value={collectionsToday}
             icon={Truck}
-            trend="Simulasyonu baslatarak veri olusturun"
+            trend={
+              collectionsToday > 0
+                ? "Gercek toplama kayitlarindan hesaplanir"
+                : "Toplama yapildikca burada gorunur"
+            }
             color="#8b5cf6"
             delay={2}
           />

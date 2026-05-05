@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { WasteBin, Alert } from "@/types";
 import {
+  createEmptyWasteComposition,
   normalizeBin,
   simulateBinTick,
 } from "@/lib/simulation/production-model";
@@ -31,6 +32,7 @@ interface SimulationStore {
   collectBins: (binIds: number[]) => void;
   replaceBins: (bins: WasteBin[]) => void;
   advanceTicks: (steps: number) => void;
+  setTickCount: (tickCount: number) => void;
   clearPendingAlerts: () => void;
   setAlerts: (alerts: Alert[]) => void;
 }
@@ -64,6 +66,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         temperature: 22,
         battery_level: 100,
         status: "normal" as const,
+        waste_composition: createEmptyWasteComposition(),
       })),
       isRunning: false,
       tickCount: 0,
@@ -102,6 +105,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               current_fill_percent: 0,
               location_type: normalizeBin(b).location_type,
               status: "normal" as const,
+              waste_composition: createEmptyWasteComposition(),
             }
           : b
       ),
@@ -117,6 +121,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               current_fill_percent: 0,
               location_type: normalizeBin(b).location_type,
               status: "normal" as const,
+              waste_composition: createEmptyWasteComposition(),
             }
           : b
       ),
@@ -132,4 +137,9 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     set((state) => ({
       tickCount: state.tickCount + Math.max(0, steps),
     })),
+
+  setTickCount: (tickCount) =>
+    set({
+      tickCount: Math.max(0, Math.floor(tickCount)),
+    }),
 }));

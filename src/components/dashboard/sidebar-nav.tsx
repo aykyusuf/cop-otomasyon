@@ -9,6 +9,7 @@ import {
   BarChart3,
   Settings,
   Trash2,
+  History,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,6 +30,7 @@ const navItems = [
   { title: "Harita", href: "/dashboard/harita", icon: Map },
   { title: "Rotalar", href: "/dashboard/rotalar", icon: Route },
   { title: "Analitik", href: "/dashboard/analitik", icon: BarChart3 },
+  { title: "Gecmis", href: "/dashboard/gecmis", icon: History },
   { title: "Ayarlar", href: "/dashboard/ayarlar", icon: Settings },
 ];
 

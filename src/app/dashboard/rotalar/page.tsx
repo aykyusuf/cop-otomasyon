@@ -169,6 +169,10 @@ export default function RotalarPage() {
     setVehicleStepIndex(undefined);
 
     let activeRoute = result;
+    const collectionItems: {
+      binId: number;
+      fillAtCollection: number;
+    }[] = [];
     if (baseScenario.scenario.waitTicks > 0 && baseScenario.waitingNode) {
       setPhase("moving-to-node");
       setMapRouteOverride([
@@ -279,6 +283,11 @@ export default function RotalarPage() {
 
       if (!collectingRef.current) break;
 
+      collectionItems.push({
+        binId: activeRoute.orderedBins[i].id,
+        fillAtCollection: activeRoute.orderedBins[i].current_fill_percent,
+      });
+
       // Collect bin individually so it visually empties on map
       collectBin(activeRoute.orderedBins[i].id);
       setCollectedBinIds((prev) => new Set(prev).add(activeRoute.orderedBins[i].id));
@@ -295,21 +304,48 @@ export default function RotalarPage() {
     if (collectingRef.current) {
       toast.success("Toplama tamamlandi!");
 
-      // Save route to DB
-      fetch("/api/routes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
-          totalDistance: activeRoute.totalDistance,
-          totalBins: activeRoute.orderedBins.length,
-          estimatedDurationMin: activeRoute.estimatedDurationMin,
-          stops: activeRoute.orderedBins.map((b, i) => ({
-            binId: b.id,
-            stopOrder: i + 1,
-          })),
-        }),
-      }).catch(console.error);
+      try {
+        const routeResponse = await fetch("/api/routes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
+            totalDistance: activeRoute.totalDistance,
+            totalBins: activeRoute.orderedBins.length,
+            estimatedDurationMin: activeRoute.estimatedDurationMin,
+            stops: activeRoute.orderedBins.map((b, i) => ({
+              binId: b.id,
+              stopOrder: i + 1,
+            })),
+          }),
+        });
+
+        const routeData = routeResponse.ok ? await routeResponse.json() : null;
+        const routeId =
+          routeData && typeof routeData.id === "number" ? routeData.id : null;
+
+        await fetch("/api/collections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: collectionItems.map((item) => ({
+              binId: item.binId,
+              routeId,
+              fillAtCollection: item.fillAtCollection,
+            })),
+          }),
+        });
+
+        if (routeId != null) {
+          await fetch(`/api/routes/${routeId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "completed" }),
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
     }
 
     collectingRef.current = false;

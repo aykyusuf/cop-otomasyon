@@ -1,5 +1,6 @@
 import type {
   Alert,
+  Collection,
   CollectionRoute,
   DashboardStats,
   LocationType,
@@ -8,6 +9,7 @@ import type {
   WasteBin,
 } from "@/types";
 import { inferLocationType } from "@/lib/simulation/site-config";
+import { createEmptyWasteComposition } from "@/lib/simulation/production-model";
 
 const now = () => new Date();
 
@@ -16,6 +18,7 @@ let nextAlertId = 1;
 let nextReadingId = 1;
 let nextRouteId = 1;
 let nextRouteStopId = 1;
+let nextCollectionId = 1;
 
 const bins: WasteBin[] = [];
 
@@ -24,6 +27,7 @@ const alerts: Alert[] = [];
 const readings: SensorReading[] = [];
 const routes: CollectionRoute[] = [];
 const routeStops: RouteStop[] = [];
+const collections: Collection[] = [];
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -71,6 +75,7 @@ export function createMockBin(data: {
     temperature: 22,
     battery_level: 100,
     status: "normal",
+    waste_composition: createEmptyWasteComposition(),
     created_at: now(),
     updated_at: now(),
   };
@@ -91,11 +96,46 @@ export function updateMockBinFillLevel(
   bin.temperature = temperature;
   bin.battery_level = battery;
   bin.status = status as WasteBin["status"];
+  if (fill === 0) {
+    bin.waste_composition = createEmptyWasteComposition();
+  }
   bin.updated_at = now();
 }
 
 export function resetMockBinAfterCollection(id: number) {
   updateMockBinFillLevel(id, 0, 22, 100, "normal");
+}
+
+export function createMockCollection(
+  binId: number,
+  routeId: number | null,
+  fillAtCollection: number
+) {
+  const collection: Collection = {
+    id: nextCollectionId++,
+    bin_id: binId,
+    route_id: routeId,
+    fill_at_collection: fillAtCollection,
+    collected_at: now(),
+  };
+  collections.push(collection);
+  return clone(collection);
+}
+
+export function bulkCreateMockCollections(
+  items: { binId: number; routeId: number | null; fillAtCollection: number }[]
+) {
+  return items.map((item) =>
+    createMockCollection(item.binId, item.routeId, item.fillAtCollection)
+  );
+}
+
+export function getMockCollectionHistory(limit = 50) {
+  return clone(
+    [...collections]
+      .sort((a, b) => b.collected_at.getTime() - a.collected_at.getTime())
+      .slice(0, limit)
+  );
 }
 
 export function deleteMockBin(id: number) {
@@ -194,7 +234,9 @@ export function getMockDashboardStats(): DashboardStats {
     totalBins: bins.length,
     avgFillPercent:
       bins.reduce((total, bin) => total + bin.current_fill_percent, 0) / Math.max(bins.length, 1),
-    collectionsToday: 0,
+    collectionsToday: collections.filter(
+      (collection) => collection.collected_at.getTime() > Date.now() - 24 * 60 * 60 * 1000
+    ).length,
     activeAlerts: alerts.filter((alert) => !alert.is_resolved).length,
     binsByStatus,
     binsByZone,
@@ -232,27 +274,75 @@ export function getMockZoneEfficiency() {
     bin_count: zoneBins.length,
     avg_fill:
       zoneBins.reduce((total, bin) => total + bin.current_fill_percent, 0) / Math.max(zoneBins.length, 1),
-    total_collections: 0,
+    total_collections: collections.filter((collection) =>
+      zoneBins.some((bin) => bin.id === collection.bin_id)
+    ).length,
     active_alerts: alerts.filter((alert) => !alert.is_resolved && zoneBins.some((bin) => bin.id === alert.bin_id)).length,
   }));
 }
 
 export function getMockFillTrends(hours = 24) {
-  const avg = getMockDashboardStats().avgFillPercent;
-  return Array.from({ length: Math.min(hours, 24) }, (_, index) => ({
-    hour: new Date(Date.now() - (hours - index - 1) * 60 * 60 * 1000),
-    avg_fill: Math.max(0, avg - 8 + index * 0.6),
-    max_fill: Math.min(100, avg + 25),
-    min_fill: Math.max(0, avg - 25),
-  }));
+  const range = Math.min(hours, 24);
+  const buckets = Array.from({ length: range }, (_, index) => {
+    const bucketHour = new Date(
+      Date.now() - (range - index - 1) * 60 * 60 * 1000
+    );
+    bucketHour.setMinutes(0, 0, 0);
+    return {
+      hour: bucketHour,
+      values: [] as number[],
+    };
+  });
+
+  readings.forEach((reading) => {
+    const readingHour = new Date(reading.recorded_at);
+    readingHour.setMinutes(0, 0, 0);
+
+    const bucket = buckets.find(
+      (item) => item.hour.getTime() === readingHour.getTime()
+    );
+
+    if (bucket) {
+      bucket.values.push(reading.fill_percent);
+    }
+  });
+
+  return buckets.map((bucket) => {
+    const total = bucket.values.reduce((sum, value) => sum + value, 0);
+    const avg = bucket.values.length > 0 ? total / bucket.values.length : 0;
+
+    return {
+      hour: bucket.hour,
+      avg_fill: avg,
+      max_fill: bucket.values.length > 0 ? Math.max(...bucket.values) : 0,
+      min_fill: bucket.values.length > 0 ? Math.min(...bucket.values) : 0,
+    };
+  });
 }
 
 export function getMockCollectionFrequency(days = 7) {
-  return Array.from({ length: days }, (_, index) => ({
-    day: new Date(Date.now() - (days - index - 1) * 24 * 60 * 60 * 1000),
-    collection_count: 0,
-    avg_fill_at_collection: 0,
-  }));
+  return Array.from({ length: days }, (_, index) => {
+    const day = new Date(Date.now() - (days - index - 1) * 24 * 60 * 60 * 1000);
+    day.setHours(0, 0, 0, 0);
+
+    const dayCollections = collections.filter((collection) => {
+      const collectedAt = new Date(collection.collected_at);
+      collectedAt.setHours(0, 0, 0, 0);
+      return collectedAt.getTime() === day.getTime();
+    });
+
+    return {
+      day,
+      collection_count: dayCollections.length,
+      avg_fill_at_collection:
+        dayCollections.length > 0
+          ? dayCollections.reduce(
+              (sum, collection) => sum + collection.fill_at_collection,
+              0
+            ) / dayCollections.length
+          : 0,
+    };
+  });
 }
 
 export function insertMockReading(
