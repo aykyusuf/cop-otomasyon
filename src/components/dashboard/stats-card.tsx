@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 
 interface StatsCardProps {
@@ -16,22 +16,32 @@ interface StatsCardProps {
 
 function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string }) {
   const [display, setDisplay] = useState(0);
+  const prevValueRef = useRef(0);
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
-    const duration = 1000;
-    const steps = 30;
-    const increment = value / steps;
-    let current = 0;
-    let step = 0;
+    // Only do the full 0→value animation on first mount
+    // After that, just update directly to avoid constant reset
+    if (!hasAnimated.current) {
+      hasAnimated.current = true;
+      const duration = 1000;
+      const steps = 30;
+      const increment = value / steps;
+      let step = 0;
 
-    const timer = setInterval(() => {
-      step++;
-      current = Math.min(value, increment * step);
-      setDisplay(current);
-      if (step >= steps) clearInterval(timer);
-    }, duration / steps);
+      const timer = setInterval(() => {
+        step++;
+        setDisplay(Math.min(value, increment * step));
+        if (step >= steps) clearInterval(timer);
+      }, duration / steps);
 
-    return () => clearInterval(timer);
+      prevValueRef.current = value;
+      return () => clearInterval(timer);
+    }
+
+    // Subsequent updates: smooth transition from previous value
+    setDisplay(value);
+    prevValueRef.current = value;
   }, [value]);
 
   return (

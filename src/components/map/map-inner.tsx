@@ -61,16 +61,16 @@ function createBinIcon(bin: WasteBin, collected?: boolean): L.DivIcon {
 function getPopupContent(bin: WasteBin): string {
   const typeLabels: Record<string, string> = {
     general: "Genel",
-    recyclable: "Geri Donusum",
+    recyclable: "Geri Dönüşüm",
     organic: "Organik",
     hazardous: "Tehlikeli",
   };
   const statusLabels: Record<string, string> = {
     normal: "Normal",
-    warning: "Uyari",
+    warning: "Uyarı",
     critical: "Kritik",
     collecting: "Toplanıyor",
-    offline: "Cevrimdisi",
+    offline: "Çevrimdışı",
   };
 
   return `
@@ -79,7 +79,7 @@ function getPopupContent(bin: WasteBin): string {
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px;">
         <span style="color: #94a3b8;">Doluluk:</span>
         <span style="color: ${getFillColor(bin.current_fill_percent)}; font-weight: 600;">${bin.current_fill_percent.toFixed(1)}%</span>
-        <span style="color: #94a3b8;">Sicaklik:</span>
+        <span style="color: #94a3b8;">Sıcaklık:</span>
         <span style="color: #e2e8f0;">${bin.temperature.toFixed(1)}°C</span>
         <span style="color: #94a3b8;">Batarya:</span>
         <span style="color: #e2e8f0;">${bin.battery_level.toFixed(0)}%</span>
@@ -87,7 +87,7 @@ function getPopupContent(bin: WasteBin): string {
         <span style="color: #e2e8f0;">${typeLabels[bin.waste_type] || bin.waste_type}</span>
         <span style="color: #94a3b8;">Durum:</span>
         <span style="color: #e2e8f0;">${statusLabels[bin.status] || bin.status}</span>
-        <span style="color: #94a3b8;">Bolge:</span>
+        <span style="color: #94a3b8;">Bölge:</span>
         <span style="color: #e2e8f0; text-transform: capitalize;">${bin.zone}</span>
       </div>
     </div>
@@ -227,10 +227,10 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
     if (!vehicleMarkerRef.current) {
       const vehicleIcon = L.divIcon({
         className: "custom-vehicle-marker",
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
         html: `<div class="collection-vehicle">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/>
             <path d="M14 9h4l4 4v4c0 .6-.4 1-1 1h-1"/>
             <circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
@@ -241,6 +241,12 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
         [routePoints[0].latitude, routePoints[0].longitude],
         { icon: vehicleIcon, zIndexOffset: 1000 }
       ).addTo(map);
+
+      // Fit map to show full route so user sees the vehicle start from depot
+      const routeBounds = L.latLngBounds(
+        routePoints.map((p) => L.latLng(p.latitude, p.longitude))
+      );
+      map.fitBounds(routeBounds.pad(0.1), { animate: true, duration: 0.5 });
     }
 
     // Animate vehicle movement
@@ -285,8 +291,8 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
       } else {
         completedLineRef.current = L.polyline(completedPts, {
           color: "#22c55e",
-          weight: 4,
-          opacity: 1,
+          weight: 5,
+          opacity: 0.9,
         }).addTo(map);
       }
     }
@@ -344,11 +350,11 @@ export default function MapInner({ routePoints, collectingIndex, collectedBinIds
           border: none !important;
         }
         .collection-vehicle {
-          width: 28px; height: 28px; border-radius: 50%;
+          width: 36px; height: 36px; border-radius: 50%;
           background: #22c55e; border: 3px solid #fff;
           display: flex; align-items: center; justify-content: center;
           animation: vehicle-pulse 1.5s ease-in-out infinite;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          box-shadow: 0 2px 12px rgba(34,197,94,0.5);
         }
         .bin-collected {
           animation: bin-collected-pop 0.4s ease-out, collected-ring 0.6s ease-out;

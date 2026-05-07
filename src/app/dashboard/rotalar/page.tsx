@@ -39,9 +39,9 @@ export default function RotalarPage() {
     setResult(r);
     setCollectedCount(0);
     if (r.orderedBins.length === 0) {
-      toast.info("Esik ustunde kutu bulunamadi.");
+      toast.info("Eşik üstünde kutu bulunamadı.");
     } else {
-      toast.success(`${r.orderedBins.length} kutu icin rota olusturuldu.`);
+      toast.success(`${r.orderedBins.length} kutu için rota oluşturuldu.`);
     }
   };
 
@@ -52,10 +52,13 @@ export default function RotalarPage() {
     setCollectedCount(0);
     setCollectedBinIds(new Set());
 
+    // Brief pause so vehicle is visible at DEPOT before moving
+    await new Promise((r) => setTimeout(r, 600));
+
     for (let i = 0; i < result.orderedBins.length; i++) {
       if (!collectingRef.current) break;
 
-      setCollectedCount(i + 1); // trigger vehicle animation FIRST
+      setCollectedCount(i + 1); // trigger vehicle animation toward next bin
       await new Promise((r) => setTimeout(r, 800));
 
       if (!collectingRef.current) break;
@@ -65,8 +68,14 @@ export default function RotalarPage() {
       setCollectedBinIds((prev) => new Set(prev).add(result.orderedBins[i].id));
     }
 
+    // Animate vehicle back to DEPOT (last element in routePoints)
+    if (collectingRef.current && result.routePoints.length > 1) {
+      setCollectedCount(result.routePoints.length - 1);
+      await new Promise((r) => setTimeout(r, 800));
+    }
+
     if (collectingRef.current) {
-      toast.success("Toplama tamamlandi!");
+      toast.success("Toplama tamamlandı!");
 
       // Save route to DB
       fetch("/api/routes", {
@@ -110,11 +119,11 @@ export default function RotalarPage() {
           {/* Generator */}
           <div className="glass rounded-xl p-4 space-y-4">
             <h3 className="font-semibold text-sm flex items-center gap-2">
-              <Route className="w-4 h-4" /> Rota Olustur
+              <Route className="w-4 h-4" /> Rota Oluştur
             </h3>
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">
-                Doluluk Esigi: {threshold}%
+                Doluluk Eşiği: {threshold}%
               </label>
               <Slider
                 value={[threshold]}
@@ -152,7 +161,7 @@ export default function RotalarPage() {
                       variant="outline"
                       className="text-xs text-emerald-500"
                     >
-                      %{result.improvementPercent.toFixed(1)} iyilestirme
+                      %{result.improvementPercent.toFixed(1)} iyileştirme
                     </Badge>
                   </div>
                 </div>
@@ -163,7 +172,7 @@ export default function RotalarPage() {
                       value={
                         (collectedCount / result.orderedBins.length) * 100
                       }
-                      label={`${collectedCount}/${result.orderedBins.length} toplandi`}
+                      label={`${collectedCount}/${result.orderedBins.length} toplandı`}
                     />
                   </div>
                 ) : (
@@ -172,7 +181,7 @@ export default function RotalarPage() {
                     className="w-full bg-emerald-600 hover:bg-emerald-500"
                     size="sm"
                   >
-                    <Play className="w-4 h-4 mr-2" /> Toplamaya Basla
+                    <Play className="w-4 h-4 mr-2" /> Toplamaya Başla
                   </Button>
                 )}
               </div>

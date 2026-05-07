@@ -12,9 +12,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   normal: "Normal",
-  warning: "Uyari",
+  warning: "Uyarı",
   critical: "Kritik",
-  offline: "Cevrimdisi",
+  offline: "Çevrimdışı",
 };
 
 export function BinStatusOverview() {

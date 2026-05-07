@@ -68,7 +68,7 @@ export function AlertList() {
               className="text-xs h-7 shrink-0"
               onClick={() => handleResolve(alert.id)}
             >
-              Coz
+              Çöz
             </Button>
           </div>
         );

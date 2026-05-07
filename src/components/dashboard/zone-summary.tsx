@@ -4,11 +4,11 @@ import { useSimulationStore } from "@/lib/stores/simulation-store";
 import { FillLevelBar } from "./fill-level-bar";
 
 const zoneConfig: Record<string, { label: string; color: string }> = {
-  muhendislik: { label: "Muhendislik", color: "#3b82f6" },
+  muhendislik: { label: "Mühendislik", color: "#3b82f6" },
   fen: { label: "Fen", color: "#8b5cf6" },
   edebiyat: { label: "Edebiyat", color: "#f59e0b" },
   yemekhane: { label: "Yemekhane", color: "#ef4444" },
-  kutuphane: { label: "Kutuphane", color: "#10b981" },
+  kutuphane: { label: "Kütüphane", color: "#10b981" },
   spor: { label: "Spor", color: "#06b6d4" },
 };
 

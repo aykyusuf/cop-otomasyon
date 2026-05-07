@@ -44,7 +44,7 @@ export function AppSidebar() {
           </div>
           <div>
             <h2 className="font-bold text-sm">EcoTrack</h2>
-            <p className="text-xs text-muted-foreground">Atik Yonetimi</p>
+            <p className="text-xs text-muted-foreground">Atık Yönetimi</p>
           </div>
         </Link>
       </SidebarHeader>

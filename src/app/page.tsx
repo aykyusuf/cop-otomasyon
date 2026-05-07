@@ -7,21 +7,21 @@ import Link from "next/link";
 const features = [
   {
     icon: MapPin,
-    title: "Gercek Zamanli Takip",
+    title: "Gerçek Zamanlı Takip",
     description:
-      "Kampusteki tum atik kutularinin doluluk oranini canli harita uzerinden izleyin.",
+      "Kampüsteki tüm atık kutularının doluluk oranını canlı harita üzerinden izleyin.",
   },
   {
     icon: Route,
-    title: "Akilli Rota Planlama",
+    title: "Akıllı Rota Planlama",
     description:
-      "Yapay zeka destekli optimizasyon ile en verimli toplama rotasini olusturun.",
+      "Yapay zeka destekli optimizasyon ile en verimli toplama rotasını oluşturun.",
   },
   {
     icon: BarChart3,
-    title: "Detayli Analitik",
+    title: "Detaylı Analitik",
     description:
-      "Atik uretim trendlerini analiz edin, verimliligi olcun ve karbon ayak izini azaltin.",
+      "Atık üretim trendlerini analiz edin, verimliliği ölçün ve karbon ayak izini azaltın.",
   },
 ];
 
@@ -45,7 +45,7 @@ export default function LandingPage() {
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm text-emerald-300 mb-8"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          IoT Simulasyon Sistemi
+          IoT Simülasyon Sistemi
         </motion.div>
 
         <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
@@ -54,14 +54,14 @@ export default function LandingPage() {
           </span>
           <br />
           <span className="text-3xl md:text-4xl font-medium text-white/80">
-            Akilli Kampus Atik Yonetimi
+            Akıllı Kampüs Atık Yönetimi
           </span>
         </h1>
 
         <p className="text-lg text-white/60 mb-12 max-w-2xl mx-auto">
-          Kampusteki atik kutularini gercek zamanli takip edin, en verimli
-          toplama rotalarini olusturun ve surdurulebilir bir kampus icin veri
-          odakli kararlar alin.
+          Kampüsteki atık kutularını gerçek zamanlı takip edin, en verimli
+          toplama rotalarını oluşturun ve sürdürülebilir bir kampüs için veri
+          odaklı kararlar alın.
         </p>
 
         <Link href="/dashboard">

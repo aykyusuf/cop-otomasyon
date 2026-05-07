@@ -15,6 +15,7 @@ export default function DashboardPage() {
 
   const bins = useSimulationStore((s) => s.bins);
   const alerts = useSimulationStore((s) => s.alerts);
+  const collectionsToday = useSimulationStore((s) => s.collectionsToday);
 
   const totalBins = bins.length;
   const avgFill =
@@ -44,10 +45,10 @@ export default function DashboardPage() {
             delay={1}
           />
           <StatsCard
-            title="Toplama Bugun"
-            value={0}
+            title="Toplama Bugün"
+            value={collectionsToday}
             icon={Truck}
-            trend="Simulasyonu baslatarak veri olusturun"
+            trend="Simülasyonu başlatarak veri oluşturun"
             color="#8b5cf6"
             delay={2}
           />
@@ -64,7 +65,7 @@ export default function DashboardPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Mini Map */}
           <div className="glass rounded-xl p-4">
-            <h3 className="font-semibold text-sm mb-3">Kampus Haritasi</h3>
+            <h3 className="font-semibold text-sm mb-3">Kampüs Haritası</h3>
             <CampusMap className="w-full h-[300px] rounded-lg" />
           </div>
 
@@ -85,7 +86,7 @@ export default function DashboardPage() {
 
           {/* Zone Summary */}
           <div className="glass rounded-xl p-4">
-            <h3 className="font-semibold text-sm mb-3">Bolge Ozeti</h3>
+            <h3 className="font-semibold text-sm mb-3">Bölge Özeti</h3>
             <ZoneSummary />
           </div>
         </div>

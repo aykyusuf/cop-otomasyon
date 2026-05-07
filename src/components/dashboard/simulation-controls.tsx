@@ -15,7 +15,7 @@ export function SimulationControls() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
-          Simulasyon
+          Simülasyon
         </span>
         <Badge
           variant={isRunning ? "default" : "outline"}
@@ -25,7 +25,7 @@ export function SimulationControls() {
               : "text-xs"
           }
         >
-          {isRunning ? `Calisiyor (${tickCount})` : "Durdu"}
+          {isRunning ? `Çalışıyor (${tickCount})` : "Durdu"}
         </Badge>
       </div>
 
@@ -48,7 +48,7 @@ export function SimulationControls() {
             onClick={start}
           >
             <Play className="w-3.5 h-3.5 mr-1" />
-            Basla
+            Başla
           </Button>
         )}
         <Button size="sm" variant="outline" onClick={reset}>

@@ -16,6 +16,7 @@ interface SimulationStore {
   speed: 1 | 2 | 4;
   tickCount: number;
   initialized: boolean;
+  collectionsToday: number;
 
   init: (bins: WasteBin[]) => void;
   start: () => void;
@@ -57,6 +58,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   speed: 1,
   tickCount: 0,
   initialized: false,
+  collectionsToday: 0,
 
   init: (bins) =>
     set({
@@ -114,14 +116,14 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         newPendingAlerts.push({
           binId: bin.id,
           type: "overflow",
-          message: `${bin.name} tasiyor! Doluluk: ${fill.toFixed(0)}%`,
+          message: `${bin.name} taşıyor! Doluluk: ${fill.toFixed(0)}%`,
           severity: "critical",
         });
       } else if (fill > 80 && bin.current_fill_percent <= 80) {
         newPendingAlerts.push({
           binId: bin.id,
           type: "high_fill",
-          message: `${bin.name} dolulugu yuksek: ${fill.toFixed(0)}%`,
+          message: `${bin.name} doluluğu yüksek: ${fill.toFixed(0)}%`,
           severity: "warning",
         });
       }
@@ -130,7 +132,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         newPendingAlerts.push({
           binId: bin.id,
           type: "high_temp",
-          message: `${bin.name} sicaklik yuksek: ${temp.toFixed(1)}°C`,
+          message: `${bin.name} sıcaklık yüksek: ${temp.toFixed(1)}°C`,
           severity: "warning",
         });
       }
@@ -139,7 +141,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         newPendingAlerts.push({
           binId: bin.id,
           type: "low_battery",
-          message: `${bin.name} batarya dusuk: ${battery.toFixed(0)}%`,
+          message: `${bin.name} batarya düşük: ${battery.toFixed(0)}%`,
           severity: "warning",
         });
       }
@@ -171,6 +173,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             }
           : b
       ),
+      collectionsToday: state.collectionsToday + 1,
     }));
   },
 
@@ -185,6 +188,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             }
           : b
       ),
+      collectionsToday: state.collectionsToday + binIds.length,
     }));
   },
 }));

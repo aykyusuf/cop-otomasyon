@@ -12,7 +12,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   general: "Genel",
-  recyclable: "Geri Donusum",
+  recyclable: "Geri Dönüşüm",
   organic: "Organik",
   hazardous: "Tehlikeli",
 };

@@ -47,13 +47,13 @@ export default function AnalitikPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="glass rounded-xl p-4">
             <h3 className="font-semibold text-sm mb-4">
-              Bolgeye Gore Doluluk
+              Bölgeye Göre Doluluk
             </h3>
             <FillLevelTrend />
           </div>
 
           <div className="glass rounded-xl p-4">
-            <h3 className="font-semibold text-sm mb-4">Atik Tipi Dagilimi</h3>
+            <h3 className="font-semibold text-sm mb-4">Atık Tipi Dağılımı</h3>
             <WasteTypeDistribution />
           </div>
         </div>
@@ -61,7 +61,7 @@ export default function AnalitikPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="glass rounded-xl p-4">
             <h3 className="font-semibold text-sm mb-4">
-              Bolge Verimliligi
+              Bölge Verimliliği
             </h3>
             <ZoneEfficiencyChart />
           </div>

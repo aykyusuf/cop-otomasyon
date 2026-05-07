@@ -13,12 +13,12 @@ export async function GET(
     const { id } = await params;
     const bin = await getBinById(parseInt(id));
     if (!bin) {
-      return NextResponse.json({ error: "Kutu bulunamadi" }, { status: 404 });
+      return NextResponse.json({ error: "Kutu bulunamadı" }, { status: 404 });
     }
     return NextResponse.json(bin);
   } catch (error) {
     console.error("Error fetching bin:", error);
-    return NextResponse.json({ error: "Hata olustu" }, { status: 500 });
+    return NextResponse.json({ error: "Hata oluştu" }, { status: 500 });
   }
 }
 
@@ -43,7 +43,7 @@ export async function PATCH(
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Error updating bin:", error);
-    return NextResponse.json({ error: "Guncelleme basarisiz" }, { status: 500 });
+    return NextResponse.json({ error: "Güncelleme başarısız" }, { status: 500 });
   }
 }
 
@@ -57,6 +57,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting bin:", error);
-    return NextResponse.json({ error: "Silme basarisiz" }, { status: 500 });
+    return NextResponse.json({ error: "Silme başarısız" }, { status: 500 });
   }
 }

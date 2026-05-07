@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EcoTrack - Akilli Kampus Atik Yonetimi",
+  title: "EcoTrack - Akıllı Kampüs Atık Yönetimi",
   description:
-    "Kampus atik kutularinin gercek zamanli takibi, akilli rota optimizasyonu ve geri donusum tesvik sistemi",
+    "Kampüs atık kutularının gerçek zamanlı takibi, akıllı rota optimizasyonu ve geri dönüşüm teşvik sistemi",
 };
 
 export default function RootLayout({

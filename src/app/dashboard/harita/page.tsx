@@ -10,17 +10,17 @@ import { Thermometer, Battery, Trash2 } from "lucide-react";
 
 const typeLabels: Record<string, string> = {
   general: "Genel",
-  recyclable: "Geri Donusum",
+  recyclable: "Geri Dönüşüm",
   organic: "Organik",
   hazardous: "Tehlikeli",
 };
 
 const zoneLabels: Record<string, string> = {
-  muhendislik: "Muhendislik",
+  muhendislik: "Mühendislik",
   fen: "Fen",
   edebiyat: "Edebiyat",
   yemekhane: "Yemekhane",
-  kutuphane: "Kutuphane",
+  kutuphane: "Kütüphane",
   spor: "Spor",
 };
 
@@ -42,7 +42,7 @@ export default function HaritaPage() {
 
   return (
     <>
-      <DashboardHeader title="Kampus Haritasi" />
+      <DashboardHeader title="Kampüs Haritası" />
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 p-4">
           <CampusMap className="w-full h-full rounded-xl border border-border" />
@@ -50,7 +50,7 @@ export default function HaritaPage() {
 
         <div className="w-80 border-l p-4 overflow-y-auto space-y-4">
           <div className="glass rounded-xl p-4 space-y-2">
-            <h3 className="font-semibold text-sm">Ozet</h3>
+            <h3 className="font-semibold text-sm">Özet</h3>
             <div className="flex gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 {bins.length} Kutu
@@ -62,7 +62,7 @@ export default function HaritaPage() {
               )}
               {warning > 0 && (
                 <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 text-xs">
-                  {warning} Uyari
+                  {warning} Uyarı
                 </Badge>
               )}
             </div>
@@ -115,7 +115,7 @@ export default function HaritaPage() {
             </div>
           ) : (
             <div className="text-sm text-muted-foreground text-center py-8">
-              Detay icin haritadan bir kutu secin.
+              Detay için haritadan bir kutu seçin.
             </div>
           )}
 
