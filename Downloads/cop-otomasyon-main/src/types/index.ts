@@ -81,48 +81,6 @@ export interface User {
   created_at: Date;
 }
 
-export type WasteType = "recyclable" | "organic" | "general" | "hazardous";
-
-export type BadgeId =
-  | "beginner"
-  | "recycler"
-  | "green_campus"
-  | "eco_champion"
-  | "streak_master"
-  | "first_throw";
-
-export interface Badge {
-  id: BadgeId;
-  name: string;
-  icon: string;
-  description: string;
-  requiredCredits: number;
-}
-
-export interface CreditTransaction {
-  id: string;
-  studentId: string;
-  amount: number;
-  reason: string;
-  wasteType: WasteType;
-  binName?: string;
-  createdAt: Date;
-}
-
-export interface Student {
-  id: string;
-  name: string;
-  studentNo: string;
-  department: string;
-  credits: number;
-  streakDays: number;
-  lastActivity: Date | null;
-  badges: BadgeId[];
-  totalThrows: number;
-  recyclingRate: number; // 0-100
-  createdAt: Date;
-}
-
 export interface DashboardStats {
   totalBins: number;
   avgFillPercent: number;

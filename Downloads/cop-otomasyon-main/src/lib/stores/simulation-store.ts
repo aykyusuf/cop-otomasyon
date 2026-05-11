@@ -1,7 +1,5 @@
 import { create } from "zustand";
 import type { WasteBin, Alert } from "@/types";
-import { useIncentiveStore } from "./incentive-store";
-
 
 interface PendingAlert {
   binId: number;
@@ -165,18 +163,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
 
   collectBin: (binId) => {
-    const bin = get().bins.find((b) => b.id === binId);
-    const incentive = useIncentiveStore.getState();
-    if (incentive.initialized && bin) {
-      const wasteTypeMap: Record<string, "recyclable" | "organic" | "general" | "hazardous"> = {
-        recyclable: "recyclable",
-        organic: "organic",
-        general: "general",
-        hazardous: "hazardous",
-      };
-      const wt = wasteTypeMap[bin.waste_type] ?? "general";
-      incentive.awardCreditsToRandom(wt, bin.name);
-    }
     set((state) => ({
       bins: state.bins.map((b) =>
         b.id === binId
@@ -191,24 +177,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     }));
   },
 
-
   collectBins: (binIds) => {
-    const bins = get().bins;
-    const incentive = useIncentiveStore.getState();
-    if (incentive.initialized) {
-      for (const id of binIds) {
-        const bin = bins.find((b) => b.id === id);
-        if (!bin) continue;
-        const wasteTypeMap: Record<string, "recyclable" | "organic" | "general" | "hazardous"> = {
-          recyclable: "recyclable",
-          organic: "organic",
-          general: "general",
-          hazardous: "hazardous",
-        };
-        const wt = wasteTypeMap[bin.waste_type] ?? "general";
-        incentive.awardCreditsToRandom(wt, bin.name);
-      }
-    }
     set((state) => ({
       bins: state.bins.map((b) =>
         binIds.includes(b.id)

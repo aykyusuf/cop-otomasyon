@@ -9,9 +9,7 @@ import {
   BarChart3,
   Settings,
   Trash2,
-  Award,
 } from "lucide-react";
-
 import {
   Sidebar,
   SidebarContent,
@@ -31,10 +29,8 @@ const navItems = [
   { title: "Harita", href: "/dashboard/harita", icon: Map },
   { title: "Rotalar", href: "/dashboard/rotalar", icon: Route },
   { title: "Analitik", href: "/dashboard/analitik", icon: BarChart3 },
-  { title: "Teşvik", href: "/dashboard/tesvik", icon: Award },
   { title: "Ayarlar", href: "/dashboard/ayarlar", icon: Settings },
 ];
-
 
 export function AppSidebar() {
   const pathname = usePathname();
