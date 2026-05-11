@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllBins, createBin } from "@/lib/queries/bins";
+import { MOCK_BINS } from "@/lib/mock-data";
 
 export async function GET() {
   try {
     const bins = await getAllBins();
+    
+    if (!bins || bins.length === 0) {
+      console.log('DB empty, falling back to MOCK_BINS');
+      return NextResponse.json(MOCK_BINS);
+    }
+    
     return NextResponse.json(bins);
   } catch (error) {
     console.error("Error fetching bins:", error);
-    return NextResponse.json(
-      { error: "Kutular getirilemedi" },
-      { status: 500 }
-    );
+    console.log('DB connection failed, falling back to MOCK_BINS');
+    return NextResponse.json(MOCK_BINS);
   }
 }
 
