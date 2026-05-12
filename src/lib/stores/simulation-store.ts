@@ -74,6 +74,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       tickCount: 0,
       pendingAlerts: [],
       alerts: [],
+      collectionsToday: 0,
     });
   },
 
