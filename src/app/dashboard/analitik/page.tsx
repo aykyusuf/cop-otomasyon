@@ -5,6 +5,8 @@ import { FillLevelTrend } from "@/components/charts/fill-level-trend";
 import { WasteTypeDistribution } from "@/components/charts/waste-type-distribution";
 import { ZoneEfficiencyChart } from "@/components/charts/zone-efficiency";
 import { TopBinsTable } from "@/components/charts/top-bins-table";
+import { ZoneWasteComposition } from "@/components/charts/zone-waste-composition";
+import { OverallWasteComposition } from "@/components/charts/overall-waste-composition";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
 
 export default function AnalitikPage() {
@@ -72,6 +74,20 @@ export default function AnalitikPage() {
             </h3>
             <TopBinsTable />
           </div>
+        </div>
+
+        <div className="glass rounded-xl p-4">
+          <h3 className="font-semibold text-sm mb-4">
+            Toplam Atik Orani
+          </h3>
+          <OverallWasteComposition />
+        </div>
+
+        <div className="glass rounded-xl p-4">
+          <h3 className="font-semibold text-sm mb-4">
+            Bolgesel Atik Kompozisyonu
+          </h3>
+          <ZoneWasteComposition />
         </div>
       </div>
     </>

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getActiveRoute, updateRouteStatus } from "@/lib/queries/routes";
+import { getRouteById, updateRouteStatus } from "@/lib/queries/routes";
 
-export async function GET() {
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const route = await getActiveRoute();
+    const { id } = await params;
+    const route = await getRouteById(parseInt(id));
     if (!route) {
-      return NextResponse.json({ error: "Aktif rota yok" }, { status: 404 });
+      return NextResponse.json({ error: "Rota bulunamadi" }, { status: 404 });
     }
     return NextResponse.json(route);
   } catch (error) {

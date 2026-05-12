@@ -18,12 +18,22 @@ export function useSimulation() {
     stop,
     reset,
     setSpeed,
+    setTickCount,
     tick,
     clearPendingAlerts,
     setAlerts,
   } = useSimulationStore();
 
   const persistCounter = useRef(0);
+
+  const refreshAlerts = useCallback(() => {
+    fetch("/api/alerts")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setAlerts(data);
+      })
+      .catch(console.error);
+  }, [setAlerts]);
 
   // Fetch initial bins on mount
   useEffect(() => {
@@ -57,8 +67,17 @@ export function useSimulation() {
         toast.warning(alert.message);
       }
     }
+
+    fetch("/api/simulation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bins: [], newAlerts: pendingAlerts }),
+    })
+      .then(refreshAlerts)
+      .catch(console.error);
+
     clearPendingAlerts();
-  }, [pendingAlerts, clearPendingAlerts]);
+  }, [pendingAlerts, clearPendingAlerts, refreshAlerts]);
 
   // Persist to DB every 5 ticks
   useEffect(() => {
@@ -79,16 +98,6 @@ export function useSimulation() {
     }).catch(console.error);
   }, [tickCount, isRunning, bins]);
 
-  // Refresh alerts periodically
-  const refreshAlerts = useCallback(() => {
-    fetch("/api/alerts")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setAlerts(data);
-      })
-      .catch(console.error);
-  }, [setAlerts]);
-
   useEffect(() => {
     refreshAlerts();
     const id = setInterval(refreshAlerts, 10000);
@@ -105,6 +114,7 @@ export function useSimulation() {
     stop,
     reset,
     setSpeed,
+    setTickCount,
     refreshAlerts,
   };
 }

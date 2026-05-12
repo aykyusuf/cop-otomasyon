@@ -1,13 +1,14 @@
 import { Pool, QueryResult, QueryResultRow } from "pg";
 
 declare global {
-  // eslint-disable-next-line no-var
   var dbPool: Pool | undefined;
 }
 
 function createPool(): Pool {
   return new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString:
+      process.env.DATABASE_URL ||
+      "postgresql://postgres:postgres@localhost:5432/cop_otomasyon",
     max: process.env.NODE_ENV === "production" ? 20 : 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
@@ -29,6 +30,20 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   params?: unknown[]
 ): Promise<QueryResult<T>> {
   return pool.query<T>(text, params);
+}
+
+export function isDatabaseConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const maybeError = error as {
+    code?: string;
+    errors?: { code?: string }[];
+  };
+
+  return (
+    maybeError.code === "ECONNREFUSED" ||
+    maybeError.errors?.some((item) => item.code === "ECONNREFUSED") === true
+  );
 }
 
 export default pool;

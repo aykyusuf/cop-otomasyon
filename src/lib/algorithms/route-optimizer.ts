@@ -3,6 +3,7 @@ import type { Point } from "./distance";
 import { buildDistanceMatrix, totalRouteDistance } from "./distance";
 import { nearestNeighborTSP } from "./nearest-neighbor";
 import { twoOpt } from "./two-opt";
+import { DEPOT_POINT } from "@/lib/simulation/site-config";
 
 export interface RouteOptimizationResult {
   bins: WasteBin[];
@@ -14,18 +15,24 @@ export interface RouteOptimizationResult {
   routePoints: Point[];
 }
 
-// Depot location (bottom center of campus map)
-const DEPOT: Point = { latitude: 645, longitude: 500 };
-
 // Average speed: ~100 pixels per minute (walking/driving on campus)
 const SPEED_PX_PER_MIN = 100;
 // Time per collection stop (minutes)
 const STOP_TIME_MIN = 2;
 
+interface OptimizeRouteOptions {
+  startPoint?: Point;
+  endPoint?: Point;
+}
+
 export function optimizeRoute(
   allBins: WasteBin[],
-  threshold: number = 70
+  threshold: number = 70,
+  options: OptimizeRouteOptions = {}
 ): RouteOptimizationResult {
+  const startPoint = options.startPoint || DEPOT_POINT;
+  const endPoint = options.endPoint || DEPOT_POINT;
+
   // Filter bins above threshold
   const bins = allBins.filter(
     (b) =>
@@ -46,11 +53,14 @@ export function optimizeRoute(
     };
   }
 
-  // Build points array: depot + bins
-  const points: Point[] = [DEPOT, ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude }))];
+  // Build points array: start + bins
+  const points: Point[] = [
+    startPoint,
+    ...bins.map((b) => ({ latitude: b.latitude, longitude: b.longitude })),
+  ];
   const distMatrix = buildDistanceMatrix(points);
 
-  // Nearest Neighbor from depot (index 0)
+  // Nearest Neighbor from start point (index 0)
   const nn = nearestNeighborTSP(distMatrix, 0);
 
   // 2-opt improvement
@@ -64,9 +74,9 @@ export function optimizeRoute(
 
   // Build route points (depot -> bins -> depot)
   const routePoints: Point[] = [
-    DEPOT,
+    startPoint,
     ...orderedBins.map((b) => ({ latitude: b.latitude, longitude: b.longitude })),
-    DEPOT,
+    endPoint,
   ];
 
   const distance = totalRouteDistance(routePoints);

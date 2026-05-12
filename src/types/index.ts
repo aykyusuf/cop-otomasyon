@@ -1,15 +1,44 @@
+export type WasteType =
+  | "general"
+  | "recyclable"
+  | "organic"
+  | "hazardous";
+
+export type BinStatus =
+  | "normal"
+  | "warning"
+  | "critical"
+  | "collecting"
+  | "offline";
+
+export type LocationType =
+  | "faculty"
+  | "cafeteria"
+  | "library"
+  | "sports"
+  | "laboratory"
+  | "outdoor";
+
 export interface WasteBin {
   id: number;
   name: string;
   latitude: number;
   longitude: number;
-  waste_type: "general" | "recyclable" | "organic" | "hazardous";
+  waste_type: WasteType;
   capacity_liters: number;
   current_fill_percent: number;
   temperature: number;
   battery_level: number;
-  status: "normal" | "warning" | "critical" | "collecting" | "offline";
+  status: BinStatus;
   zone: string;
+  location_type?: LocationType;
+  waste_composition?: {
+    plastic: number;
+    metal: number;
+    organic: number;
+    nonRecyclable: number;
+    hazardous: number;
+  };
   created_at: Date;
   updated_at: Date;
 }

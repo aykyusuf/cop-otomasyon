@@ -11,22 +11,13 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
-
-const ZONE_COLORS: Record<string, string> = {
-  muhendislik: "#3b82f6",
-  fen: "#8b5cf6",
-  edebiyat: "#f59e0b",
-  yemekhane: "#ef4444",
-  kutuphane: "#10b981",
-  spor: "#06b6d4",
-};
+import { ZONE_OPTIONS } from "@/lib/simulation/site-config";
 
 export function ZoneEfficiencyChart() {
   const bins = useSimulationStore((s) => s.bins);
 
-  const zones = Object.keys(ZONE_COLORS);
-  const data = zones.map((zone) => {
-    const zoneBins = bins.filter((b) => b.zone === zone);
+  const data = ZONE_OPTIONS.map((zone) => {
+    const zoneBins = bins.filter((b) => b.zone === zone.key);
     const avg =
       zoneBins.length > 0
         ? zoneBins.reduce((s, b) => s + b.current_fill_percent, 0) / zoneBins.length
@@ -34,10 +25,10 @@ export function ZoneEfficiencyChart() {
     const critical = zoneBins.filter((b) => b.status === "critical").length;
 
     return {
-      zone: zone.charAt(0).toUpperCase() + zone.slice(1),
+      zone: zone.label,
       doluluk: parseFloat(avg.toFixed(1)),
       kritik: critical,
-      fill: ZONE_COLORS[zone],
+      fill: zone.color,
     };
   });
 

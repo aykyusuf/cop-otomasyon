@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { AlertList } from "@/components/dashboard/alert-list";
@@ -7,21 +8,29 @@ import { BinStatusOverview } from "@/components/dashboard/bin-status-overview";
 import { ZoneSummary } from "@/components/dashboard/zone-summary";
 import { CampusMap } from "@/components/map/campus-map";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
-import { useSimulation } from "@/hooks/use-simulation";
 import { Trash2, Percent, Truck, AlertTriangle } from "lucide-react";
 
 export default function DashboardPage() {
-  useSimulation();
-
   const bins = useSimulationStore((s) => s.bins);
   const alerts = useSimulationStore((s) => s.alerts);
-  const collectionsToday = useSimulationStore((s) => s.collectionsToday);
+  const [collectionsToday, setCollectionsToday] = useState(0);
 
   const totalBins = bins.length;
   const avgFill =
     bins.length > 0
       ? bins.reduce((s, b) => s + b.current_fill_percent, 0) / bins.length
       : 0;
+
+  useEffect(() => {
+    fetch("/api/history")
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.summary) {
+          setCollectionsToday(data.summary.collectionsToday || 0);
+        }
+      })
+      .catch(console.error);
+  }, [alerts.length, bins.length]);
 
   return (
     <>
@@ -45,10 +54,14 @@ export default function DashboardPage() {
             delay={1}
           />
           <StatsCard
-            title="Toplama Bugün"
+            title="Toplama Bugun"
             value={collectionsToday}
             icon={Truck}
-            trend="Simülasyonu başlatarak veri oluşturun"
+            trend={
+              collectionsToday > 0
+                ? "Gercek toplama kayitlarindan hesaplanir"
+                : "Toplama yapildikca burada gorunur"
+            }
             color="#8b5cf6"
             delay={2}
           />

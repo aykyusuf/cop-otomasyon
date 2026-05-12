@@ -7,22 +7,13 @@ import { useUIStore } from "@/lib/stores/ui-store";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Thermometer, Battery, Trash2 } from "lucide-react";
-
-const typeLabels: Record<string, string> = {
-  general: "Genel",
-  recyclable: "Geri Dönüşüm",
-  organic: "Organik",
-  hazardous: "Tehlikeli",
-};
-
-const zoneLabels: Record<string, string> = {
-  muhendislik: "Mühendislik",
-  fen: "Fen",
-  edebiyat: "Edebiyat",
-  yemekhane: "Yemekhane",
-  kutuphane: "Kütüphane",
-  spor: "Spor",
-};
+import {
+  WASTE_COMPOSITION_COLORS,
+  WASTE_COMPOSITION_LABELS,
+  WASTE_TYPE_LABELS,
+  ZONE_CONFIG,
+} from "@/lib/simulation/site-config";
+import { normalizeWasteComposition } from "@/lib/simulation/production-model";
 
 function getFillColorClass(fill: number): string {
   if (fill < 25) return "text-green-500";
@@ -36,19 +27,26 @@ export default function HaritaPage() {
   const selectedBinId = useUIStore((s) => s.selectedBinId);
   const selectBin = useUIStore((s) => s.selectBin);
   const selectedBin = bins.find((b) => b.id === selectedBinId);
+  const selectedZoneConfig = selectedBin ? ZONE_CONFIG[selectedBin.zone] : null;
+  const selectedBinComposition = selectedBin
+    ? normalizeWasteComposition(selectedBin.waste_composition)
+    : null;
+  const selectedBinCompositionTotal = selectedBinComposition
+    ? Object.values(selectedBinComposition).reduce((sum, value) => sum + value, 0)
+    : 0;
 
   const critical = bins.filter((b) => b.status === "critical").length;
   const warning = bins.filter((b) => b.status === "warning").length;
 
   return (
     <>
-      <DashboardHeader title="Kampüs Haritası" />
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 p-4">
+      <DashboardHeader title="Kampus Haritasi" />
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden lg:flex-row">
+        <div className="min-h-[420px] flex-1 p-4">
           <CampusMap className="w-full h-full rounded-xl border border-border" />
         </div>
 
-        <div className="w-80 border-l p-4 overflow-y-auto space-y-4">
+        <div className="max-h-[42vh] border-t p-4 overflow-y-auto space-y-4 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
           <div className="glass rounded-xl p-4 space-y-2">
             <h3 className="font-semibold text-sm">Özet</h3>
             <div className="flex gap-2 flex-wrap">
@@ -98,7 +96,7 @@ export default function HaritaPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Thermometer className="w-4 h-4 text-muted-foreground" />
-                  <span>{selectedBin.temperature.toFixed(1)}°C</span>
+                  <span>{selectedBin.temperature.toFixed(1)} C</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Battery className="w-4 h-4 text-muted-foreground" />
@@ -106,12 +104,76 @@ export default function HaritaPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Trash2 className="w-4 h-4 text-muted-foreground" />
-                  <span>{typeLabels[selectedBin.waste_type]}</span>
+                  <span>{WASTE_TYPE_LABELS[selectedBin.waste_type]}</span>
                 </div>
                 <div className="text-muted-foreground capitalize">
-                  {zoneLabels[selectedBin.zone]}
+                  {ZONE_CONFIG[selectedBin.zone]?.label || selectedBin.zone}
                 </div>
               </div>
+
+              {selectedZoneConfig && selectedBinComposition && (
+                <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">
+                      {selectedZoneConfig.label} / {selectedBin.name} Kompozisyonu
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {selectedBinCompositionTotal > 0 ? "Canli dagilim" : "Henuz birikim yok"}
+                    </span>
+                  </div>
+
+                  <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+                    {Object.entries(selectedBinComposition).map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="h-full"
+                        style={{
+                          width: `${
+                            selectedBinCompositionTotal > 0
+                              ? (value / selectedBinCompositionTotal) * 100
+                              : 0
+                          }%`,
+                          backgroundColor:
+                            WASTE_COMPOSITION_COLORS[
+                              key as keyof typeof WASTE_COMPOSITION_COLORS
+                            ],
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    {Object.entries(selectedBinComposition).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{
+                              backgroundColor:
+                                WASTE_COMPOSITION_COLORS[
+                                  key as keyof typeof WASTE_COMPOSITION_COLORS
+                                ],
+                            }}
+                          />
+                          <span>
+                            {
+                              WASTE_COMPOSITION_LABELS[
+                                key as keyof typeof WASTE_COMPOSITION_LABELS
+                              ]
+                            }
+                          </span>
+                        </div>
+                        <span className="font-medium text-foreground">
+                          {selectedBinCompositionTotal > 0
+                            ? ((value / selectedBinCompositionTotal) * 100).toFixed(1)
+                            : "0.0"}
+                          %
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground text-center py-8">
@@ -130,11 +192,11 @@ export default function HaritaPage() {
                 <button
                   key={bin.id}
                   onClick={() => selectBin(bin.id)}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-sm hover:bg-accent transition-colors ${
+                  className={`w-full flex items-center justify-between gap-3 p-2 rounded-lg text-sm hover:bg-accent transition-colors ${
                     selectedBinId === bin.id ? "bg-accent" : ""
                   }`}
                 >
-                  <span className="font-medium">{bin.name}</span>
+                  <span className="truncate font-medium">{bin.name}</span>
                   <span
                     className={getFillColorClass(bin.current_fill_percent)}
                   >

@@ -1,4 +1,12 @@
-import { query } from "@/lib/db";
+import { isDatabaseConnectionError, query } from "@/lib/db";
+import {
+  addMockRouteStops,
+  createMockRoute,
+  getMockActiveRoute,
+  getMockRouteById,
+  getMockRouteHistory,
+  updateMockRouteStatus,
+} from "@/lib/mock-db";
 import { CollectionRoute, RouteStop } from "@/types";
 
 export async function createRoute(data: {
@@ -7,13 +15,18 @@ export async function createRoute(data: {
   totalBins: number;
   estimatedDurationMin: number;
 }): Promise<CollectionRoute> {
-  const result = await query<CollectionRoute>(
-    `INSERT INTO collection_routes (name, total_distance, total_bins, estimated_duration_min)
-     VALUES ($1, $2, $3, $4)
-     RETURNING *`,
-    [data.name, data.totalDistance, data.totalBins, data.estimatedDurationMin]
-  );
-  return result.rows[0];
+  try {
+    const result = await query<CollectionRoute>(
+      `INSERT INTO collection_routes (name, total_distance, total_bins, estimated_duration_min)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [data.name, data.totalDistance, data.totalBins, data.estimatedDurationMin]
+    );
+    return result.rows[0];
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return createMockRoute(data);
+    throw error;
+  }
 }
 
 export async function addRouteStops(
@@ -28,10 +41,18 @@ export async function addRouteStops(
 
   const params = stops.flatMap((s) => [routeId, s.binId, s.stopOrder]);
 
-  await query(
-    `INSERT INTO route_stops (route_id, bin_id, stop_order) VALUES ${values}`,
-    params
-  );
+  try {
+    await query(
+      `INSERT INTO route_stops (route_id, bin_id, stop_order) VALUES ${values}`,
+      params
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      addMockRouteStops(routeId, stops);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function updateRouteStatus(
@@ -45,26 +66,77 @@ export async function updateRouteStatus(
         ? ", completed_at = NOW()"
         : "";
 
-  await query(
-    `UPDATE collection_routes SET status = $1${timeField} WHERE id = $2`,
-    [status, routeId]
-  );
+  try {
+    await query(
+      `UPDATE collection_routes SET status = $1${timeField} WHERE id = $2`,
+      [status, routeId]
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      updateMockRouteStatus(routeId, status);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function getActiveRoute(): Promise<
   (CollectionRoute & { stops: RouteStop[] }) | null
 > {
-  const routeResult = await query<CollectionRoute>(
-    "SELECT * FROM collection_routes WHERE status IN ('planned', 'in_progress') ORDER BY created_at DESC LIMIT 1"
-  );
+  let routeResult;
+  try {
+    routeResult = await query<CollectionRoute>(
+      "SELECT * FROM collection_routes WHERE status IN ('planned', 'in_progress') ORDER BY created_at DESC LIMIT 1"
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return getMockActiveRoute();
+    throw error;
+  }
 
   if (routeResult.rows.length === 0) return null;
 
   const route = routeResult.rows[0];
-  const stopsResult = await query<RouteStop>(
-    "SELECT * FROM route_stops WHERE route_id = $1 ORDER BY stop_order",
-    [route.id]
-  );
+  let stopsResult;
+  try {
+    stopsResult = await query<RouteStop>(
+      "SELECT * FROM route_stops WHERE route_id = $1 ORDER BY stop_order",
+      [route.id]
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return getMockActiveRoute();
+    throw error;
+  }
+
+  return { ...route, stops: stopsResult.rows };
+}
+
+export async function getRouteById(
+  id: number
+): Promise<(CollectionRoute & { stops: RouteStop[] }) | null> {
+  let routeResult;
+  try {
+    routeResult = await query<CollectionRoute>(
+      "SELECT * FROM collection_routes WHERE id = $1",
+      [id]
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return getMockRouteById(id);
+    throw error;
+  }
+
+  if (routeResult.rows.length === 0) return null;
+
+  const route = routeResult.rows[0];
+  let stopsResult;
+  try {
+    stopsResult = await query<RouteStop>(
+      "SELECT * FROM route_stops WHERE route_id = $1 ORDER BY stop_order",
+      [route.id]
+    );
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return getMockRouteById(id);
+    throw error;
+  }
 
   return { ...route, stops: stopsResult.rows };
 }
@@ -72,9 +144,14 @@ export async function getActiveRoute(): Promise<
 export async function getRouteHistory(
   limit: number = 20
 ): Promise<CollectionRoute[]> {
-  const result = await query<CollectionRoute>(
-    "SELECT * FROM collection_routes ORDER BY created_at DESC LIMIT $1",
-    [limit]
-  );
-  return result.rows;
+  try {
+    const result = await query<CollectionRoute>(
+      "SELECT * FROM collection_routes ORDER BY created_at DESC LIMIT $1",
+      [limit]
+    );
+    return result.rows;
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) return getMockRouteHistory(limit);
+    throw error;
+  }
 }

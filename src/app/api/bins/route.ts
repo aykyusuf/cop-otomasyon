@@ -17,7 +17,15 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, latitude, longitude, waste_type, zone, capacity_liters } =
+    const {
+      name,
+      latitude,
+      longitude,
+      waste_type,
+      zone,
+      location_type,
+      capacity_liters,
+    } =
       body;
 
     if (!name || latitude == null || longitude == null || !waste_type || !zone) {
@@ -33,6 +41,7 @@ export async function POST(request: NextRequest) {
       longitude,
       waste_type,
       zone,
+      location_type,
       capacity_liters,
     });
     return NextResponse.json(bin, { status: 201 });

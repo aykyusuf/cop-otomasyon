@@ -2,6 +2,20 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Database
+
+The app uses PostgreSQL when `DATABASE_URL` is available. For local development,
+copy `.env.example` to `.env.local`, update the URL if needed, then run:
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
+If PostgreSQL is not running locally, API routes fall back to in-memory demo
+data so the dashboard, alerts, map, and bin creation flow still work while
+developing. In-memory data resets when the dev server restarts.
+
 First, run the development server:
 
 ```bash
