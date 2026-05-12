@@ -1,6 +1,6 @@
 import type { WasteBin } from "@/types";
 import type { Point } from "./distance";
-import { buildDistanceMatrix, totalRouteDistance } from "./distance";
+import { buildDistanceMatrix, euclideanDistance, totalRouteDistance } from "./distance";
 import { nearestNeighborTSP } from "./nearest-neighbor";
 import { twoOpt } from "./two-opt";
 import { DEPOT_POINT } from "@/lib/simulation/site-config";
@@ -97,4 +97,51 @@ export function optimizeRoute(
     estimatedDurationMin: Math.ceil(totalTime),
     routePoints,
   };
+}
+
+// Mevcut rotaya yeni bir kutuyu en az ek mesafeyle ekler (cheapest insertion).
+// fromIndex: aracın şu an kaçıncı routePoint'te olduğu; sadece o noktadan sonraki
+// segmentler değerlendirilir, böylece aracın geçtiği yer geri eklenmez.
+export function insertBinCheapest(
+  currentOrderedBins: WasteBin[],
+  currentRoutePoints: Point[],
+  newBin: WasteBin,
+  fromIndex: number
+): { orderedBins: WasteBin[]; routePoints: Point[] } {
+  const newPoint: Point = { latitude: newBin.latitude, longitude: newBin.longitude };
+
+  const remainingStart = Math.max(fromIndex, 0);
+  const points = currentRoutePoints;
+  const n = points.length;
+
+  let bestCost = Infinity;
+  let bestInsertAfter = remainingStart;
+
+  for (let i = remainingStart; i < n - 1; i++) {
+    const prev = points[i];
+    const next = points[i + 1];
+    const cost =
+      euclideanDistance(prev, newPoint) +
+      euclideanDistance(newPoint, next) -
+      euclideanDistance(prev, next);
+    if (cost < bestCost) {
+      bestCost = cost;
+      bestInsertAfter = i;
+    }
+  }
+
+  const newRoutePoints = [
+    ...points.slice(0, bestInsertAfter + 1),
+    newPoint,
+    ...points.slice(bestInsertAfter + 1),
+  ];
+
+  const binInsertIdx = bestInsertAfter;
+  const newOrderedBins = [
+    ...currentOrderedBins.slice(0, binInsertIdx),
+    newBin,
+    ...currentOrderedBins.slice(binInsertIdx),
+  ];
+
+  return { orderedBins: newOrderedBins, routePoints: newRoutePoints };
 }

@@ -21,6 +21,7 @@ interface SimulationStore {
   speed: 1 | 2 | 4;
   tickCount: number;
   initialized: boolean;
+  collectionsToday: number;
 
   init: (bins: WasteBin[]) => void;
   start: () => void;
@@ -45,6 +46,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   speed: 1,
   tickCount: 0,
   initialized: false,
+  collectionsToday: 0,
 
   init: (bins) =>
     set({
@@ -72,6 +74,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       tickCount: 0,
       pendingAlerts: [],
       alerts: [],
+      collectionsToday: 0,
     });
   },
 
@@ -109,6 +112,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             }
           : b
       ),
+      collectionsToday: state.collectionsToday + 1,
     }));
   },
 
@@ -125,6 +129,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             }
           : b
       ),
+      collectionsToday: state.collectionsToday + binIds.length,
     }));
   },
 

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSimulationStore } from "@/lib/stores/simulation-store";
 import {
   optimizeRoute,
+  insertBinCheapest,
   type RouteOptimizationResult,
 } from "@/lib/algorithms/route-optimizer";
 import {
@@ -25,7 +26,7 @@ import {
 } from "@/lib/simulation/route-variants";
 import { projectBinForward } from "@/lib/simulation/production-model";
 import { DEPOT_POINT } from "@/lib/simulation/site-config";
-import { Route, Play, CheckCircle, MapPin, Clock, Ruler, PauseCircle } from "lucide-react";
+import { Route, Play, CheckCircle, MapPin, Clock, Ruler, PauseCircle, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import { FillLevelBar } from "@/components/dashboard/fill-level-bar";
 
@@ -97,7 +98,13 @@ export default function RotalarPage() {
     { latitude: number; longitude: number }[] | null
   >(null);
   const [vehicleStepIndex, setVehicleStepIndex] = useState<number | undefined>(undefined);
+  const [dynamicAddedIds, setDynamicAddedIds] = useState<Set<number>>(new Set());
   const collectingRef = useRef(false);
+  // Rota içindeki kutu ID'lerini takip eder (dinamik ekleme için)
+  const routeBinIdsRef = useRef<Set<number>>(new Set());
+  // Anlık result'u ref'te de tutuyoruz (closure sorununu çözmek için)
+  const resultRef = useRef<RouteOptimizationResult | null>(null);
+  const collectedCountRef = useRef(0);
   const isExecutingRoute = phase !== "idle";
   const isCollectingPhase = phase === "collecting";
 
@@ -106,8 +113,68 @@ export default function RotalarPage() {
     return () => { collectingRef.current = false; };
   }, []);
 
+  // result değiştikçe ref'i güncelle
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
+
+  // collectedCount değiştikçe ref'i güncelle
+  useEffect(() => {
+    collectedCountRef.current = collectedCount;
+  }, [collectedCount]);
+
+  // ── Dinamik rota güncelleme ──────────────────────────────────────────────
+  // Toplama sırasında eşiği aşan YENİ kutular cheapest-insertion ile eklenir
+  useEffect(() => {
+    if (phase !== "collecting") return;
+    const current = resultRef.current;
+    if (!current) return;
+
+    const newBins = bins.filter(
+      (b) =>
+        b.current_fill_percent >= threshold &&
+        b.status !== "offline" &&
+        b.status !== "collecting" &&
+        !routeBinIdsRef.current.has(b.id) &&
+        !collectedBinIds.has(b.id)
+    );
+
+    if (newBins.length === 0) return;
+
+    let updatedResult = { ...current };
+    const addedNames: string[] = [];
+
+    for (const newBin of newBins) {
+      const vehicleRouteIdx = collectedCountRef.current;
+      const { orderedBins, routePoints } = insertBinCheapest(
+        updatedResult.orderedBins,
+        updatedResult.routePoints,
+        newBin,
+        vehicleRouteIdx
+      );
+      updatedResult = { ...updatedResult, orderedBins, routePoints };
+      routeBinIdsRef.current.add(newBin.id);
+      addedNames.push(newBin.name);
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResult(updatedResult);
+    setDynamicAddedIds((prev) => {
+      const next = new Set(prev);
+      newBins.forEach((b) => next.add(b.id));
+      return next;
+    });
+
+    toast(`Rotaya eklendi: ${addedNames.join(", ")}`, {
+      description: `Doluluk eşiğini (${threshold}%) aştı, en kısa yola eklendi.`,
+      duration: 4000,
+    });
+  }, [bins, phase, threshold, collectedBinIds]);
+
   const handleGenerate = () => {
     collectingRef.current = false;
+    setDynamicAddedIds(new Set());
+    routeBinIdsRef.current = new Set();
     resetRouteState(
       setResult,
       setScenarioResults,
@@ -141,6 +208,9 @@ export default function RotalarPage() {
     setScenarioResults(scenarios);
     setSelectedScenarioId(bestScenario?.scenario.id || null);
     setResult(bestScenario?.route || null);
+    if (bestScenario?.route) {
+      routeBinIdsRef.current = new Set(bestScenario.route.orderedBins.map((b) => b.id));
+    }
 
     if (!bestScenario || bestScenario.route.orderedBins.length === 0) {
       toast.info("Esik ustunde kutu bulunamadi.");
@@ -254,6 +324,7 @@ export default function RotalarPage() {
       setScenarioResults(refreshedScenarios);
       setSelectedScenarioId(dispatchScenario?.scenario.id || null);
       setResult(activeRoute);
+      routeBinIdsRef.current = new Set(activeRoute.orderedBins.map((b) => b.id));
       setMapRouteOverride(null);
       setVehicleStepIndex(undefined);
       setWaitProgress(100);
@@ -266,15 +337,29 @@ export default function RotalarPage() {
     setMapRouteOverride(null);
     setVehicleStepIndex(undefined);
 
-    for (let i = 0; i < activeRoute.orderedBins.length; i++) {
-      if (!collectingRef.current) break;
+    // Dinamik ekleme için rotadaki kutuların ID'lerini ve mevcut result'u ref'e yaz
+    resultRef.current = activeRoute;
+    routeBinIdsRef.current = new Set(activeRoute.orderedBins.map((b) => b.id));
 
-      setTravelIndex(i + 1);
+    // ── ID bazlı toplama döngüsü ─────────────────────────────────────────────
+    // index yerine ID takip ediyoruz → dinamik ekleme sırasında kayma olmaz
+    const collectedIdsLocal = new Set<number>();
+    while (collectingRef.current) {
+      const currentResult = resultRef.current;
+      if (!currentResult) break;
+
+      // Henüz toplanmamış ilk kutuyu bul (sıra dinamik ekleme ile değişebilir)
+      const nextBin = currentResult.orderedBins.find((b) => !collectedIdsLocal.has(b.id));
+      if (!nextBin) break;
+
+      const stopIndex = currentResult.orderedBins.indexOf(nextBin) + 1;
+      setTravelIndex(stopIndex);
+      setCollectedCount(stopIndex);
       await sleep(800);
 
       if (!collectingRef.current) break;
 
-      setCollectingBinId(activeRoute.orderedBins[i].id);
+      setCollectingBinId(nextBin.id);
       for (let step = 1; step <= COLLECTION_PROGRESS_STEPS; step++) {
         setCollectionProgress((step / COLLECTION_PROGRESS_STEPS) * 100);
         await sleep(COLLECTION_STOP_MS / COLLECTION_PROGRESS_STEPS);
@@ -284,20 +369,21 @@ export default function RotalarPage() {
       if (!collectingRef.current) break;
 
       collectionItems.push({
-        binId: activeRoute.orderedBins[i].id,
-        fillAtCollection: activeRoute.orderedBins[i].current_fill_percent,
+        binId: nextBin.id,
+        fillAtCollection: nextBin.current_fill_percent,
       });
 
-      // Collect bin individually so it visually empties on map
-      collectBin(activeRoute.orderedBins[i].id);
-      setCollectedBinIds((prev) => new Set(prev).add(activeRoute.orderedBins[i].id));
+      collectBin(nextBin.id);
+      setCollectedBinIds((prev) => new Set(prev).add(nextBin.id));
       setCollectingBinId(null);
       setCollectionProgress(0);
-      setCollectedCount(i + 1);
+      collectedIdsLocal.add(nextBin.id);
     }
 
-    if (collectingRef.current && activeRoute.routePoints.length > 1) {
-      setTravelIndex(activeRoute.routePoints.length - 1);
+    // Tamamlanmış rotaya göre depot'a dön
+    const finalRoute = resultRef.current || activeRoute;
+    if (collectingRef.current && finalRoute.routePoints.length > 1) {
+      setTravelIndex(finalRoute.routePoints.length - 1);
       await sleep(900);
     }
 
@@ -310,10 +396,10 @@ export default function RotalarPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: `Rota-${new Date().toLocaleTimeString("tr-TR")}`,
-            totalDistance: activeRoute.totalDistance,
-            totalBins: activeRoute.orderedBins.length,
-            estimatedDurationMin: activeRoute.estimatedDurationMin,
-            stops: activeRoute.orderedBins.map((b, i) => ({
+            totalDistance: finalRoute.totalDistance,
+            totalBins: finalRoute.orderedBins.length,
+            estimatedDurationMin: finalRoute.estimatedDurationMin,
+            stops: finalRoute.orderedBins.map((b, i) => ({
               binId: b.id,
               stopOrder: i + 1,
             })),
@@ -466,6 +552,10 @@ export default function RotalarPage() {
                         setScenarioResults(plan.scenarios);
                         setSelectedScenarioId(recommended.scenario.id);
                         setResult(recommended.route);
+                        routeBinIdsRef.current = new Set(
+                          recommended.route.orderedBins.map((b) => b.id)
+                        );
+                        setDynamicAddedIds(new Set());
                       }}
                       className={`w-full rounded-lg border p-3 text-left transition-colors ${
                         activePlanCard ? "border-sky-500 bg-sky-500/8" : "hover:bg-accent"
@@ -523,6 +613,10 @@ export default function RotalarPage() {
                       onClick={() => {
                         setSelectedScenarioId(scenarioResult.scenario.id);
                         setResult(scenarioResult.route);
+                        routeBinIdsRef.current = new Set(
+                          scenarioResult.route.orderedBins.map((b) => b.id)
+                        );
+                        setDynamicAddedIds(new Set());
                         setCollectedCount(0);
                         setCollectedBinIds(new Set());
                         setCollecting(false);
@@ -675,32 +769,52 @@ export default function RotalarPage() {
 
               {/* Stop list */}
               <div className="glass rounded-xl p-4 space-y-2">
-                <h3 className="font-semibold text-sm">Duraklar</h3>
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  Duraklar
+                  {dynamicAddedIds.size > 0 && (
+                    <Badge className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/20">
+                      +{dynamicAddedIds.size} dinamik
+                    </Badge>
+                  )}
+                </h3>
                 <div className="max-h-72 overflow-y-auto pr-1 space-y-2">
-                  {result.orderedBins.map((bin, i) => (
-                    <div
-                      key={bin.id}
-                      className="flex items-center gap-3 p-2 rounded-lg text-sm"
-                    >
-                      <span
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          isCollectingPhase && i < collectedCount
-                            ? "bg-emerald-500/20 text-emerald-500"
-                            : "bg-muted text-muted-foreground"
+                  {result.orderedBins.map((bin, i) => {
+                    const isDynamic = dynamicAddedIds.has(bin.id);
+                    const isCollected = collectedBinIds.has(bin.id);
+                    return (
+                      <div
+                        key={bin.id}
+                        className={`flex items-center gap-3 p-2 rounded-lg text-sm transition-colors ${
+                          isDynamic ? "bg-blue-500/5 border border-blue-500/20" : ""
                         }`}
                       >
-                        {isCollectingPhase && i < collectedCount ? (
-                          <CheckCircle className="w-4 h-4" />
-                        ) : (
-                          i + 1
+                        <span
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isCollected
+                              ? "bg-emerald-500/20 text-emerald-500"
+                              : isDynamic
+                              ? "bg-blue-500/20 text-blue-400"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isCollected ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : isDynamic ? (
+                            <PlusCircle className="w-4 h-4" />
+                          ) : (
+                            i + 1
+                          )}
+                        </span>
+                        <span className="flex-1 font-medium">{bin.name}</span>
+                        {isDynamic && (
+                          <span className="text-xs text-blue-400 mr-1">yeni</span>
                         )}
-                      </span>
-                      <span className="flex-1 font-medium">{bin.name}</span>
-                      <span className="text-muted-foreground">
-                        {bin.current_fill_percent.toFixed(0)}%
-                      </span>
-                    </div>
-                  ))}
+                        <span className="text-muted-foreground">
+                          {bin.current_fill_percent.toFixed(0)}%
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>
